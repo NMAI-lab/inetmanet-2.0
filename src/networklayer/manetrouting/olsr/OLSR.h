@@ -382,6 +382,8 @@ class OLSR : public ManetRoutingBase
     /// Routing table.
     OLSR_rtable     rtable_;
 
+    uint32_t prev_rtablesize; //used to keep track of routing table size changes
+
     typedef std::map<nsaddr_t,OLSR_rtable*> GlobalRtable;
     static GlobalRtable globalRtable;
     typedef std::map<nsaddr_t,std::vector<nsaddr_t> > DistributionPath;

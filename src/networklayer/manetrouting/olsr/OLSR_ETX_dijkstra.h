@@ -90,6 +90,8 @@ class Dijkstra : public cOwnedObject
     void run();
     void clear();
 
+    void outputGraph();
+
     inline int highest_hop() { return highest_hop_; }
     inline std::set<nsaddr_t> * all_nodes() { return all_nodes_; }
     inline hop& D(const nsaddr_t &node) { return dijkstraMap[node]; }

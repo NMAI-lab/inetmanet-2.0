@@ -28,6 +28,7 @@
 
 #include <OLSR_ETX_dijkstra.h>
 #include <OLSR_ETX.h>
+#include <iostream>
 
 
 Dijkstra::Dijkstra()
@@ -155,6 +156,9 @@ edge* Dijkstra::get_edge(const nsaddr_t & dest_node, const nsaddr_t & last_node)
 
 void Dijkstra::run()
 {
+    //output the graph for logging purposes...
+    outputGraph();
+
     // While there are non processed nodes...
     while (nonprocessed_nodes_->begin() != nonprocessed_nodes_->end())
     {
@@ -296,6 +300,22 @@ void Dijkstra::run()
         // Remove it from the list of processed nodes
         nonprocessed_nodes_->erase(current_node);
     }
+}
+
+void Dijkstra::outputGraph(){
+    typedef LinkArray::iterator it_type;
+    std::cout<< "Graph: [t="<<simTime()<<"] "<<endl;
+    for(it_type it_nodes = link_array_->begin(); it_nodes != link_array_->end(); it_nodes++) {
+        // iterator->first = key
+        // iterator->second = value
+        std::cout<<"Node: "<<it_nodes->first<<" [";
+        for (std::vector<edge*>::iterator it = it_nodes->second.begin(); it != it_nodes->second.end(); it++)
+            {
+            edge* current_edge = *it;
+            std::cout<< " "<< current_edge->last_node();
+            }
+        std::cout<<"] ";
+    }std::cout<<endl;
 }
 
 void Dijkstra::clear()

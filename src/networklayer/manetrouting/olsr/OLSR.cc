@@ -1499,6 +1499,11 @@ OLSR::rtable_computation()
     }
     setTopologyChanged(false);
     computeDistributionPath(ra_addr());
+    if (rtable_.size()!= prev_rtablesize){ //only log routing table size changes.
+        std::cout<<"OLSR: routing_table_size: "<< ra_addr()<<" "<< rtable_.size() <<" "<<simTime()<<endl;
+        prev_rtablesize = rtable_.size();
+    }
+
 }
 
 ///
@@ -2830,6 +2835,7 @@ void OLSR::finish()
 OLSR::~OLSR()
 {
     rtable_.clear();
+    prev_rtablesize=0;
     msgs_.clear();
     if (state_ptr)
     {

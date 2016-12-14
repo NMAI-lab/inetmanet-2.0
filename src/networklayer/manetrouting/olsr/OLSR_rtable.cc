@@ -99,6 +99,19 @@ OLSR_rtable::lookup(const nsaddr_t &dest)
     return (*it).second;
 }
 
+OLSR_rt_entry*
+OLSR_rtable::lookup1(const nsaddr_t, const nsaddr_t &dest)
+{
+    // Get the iterator at "dest" position
+    rtable_t::iterator it = rt_.find(dest);
+    // If there is no route to "dest", return NULL
+    if (it == rt_.end())
+        return NULL;
+
+    // Returns the rt entry (second element of the pair)
+    return (*it).second;
+}
+
 ///
 /// \brief  Finds the appropiate entry which must be used in order to forward
 ///     a data packet to a next hop (given a destination).
@@ -218,6 +231,9 @@ std::string OLSR_rtable::detailedInfo()
         out << "dest:"<< OLSR::node_id(entry->dest_addr()) << " ";
         out << "gw:" << OLSR::node_id(entry->next_addr()) << " ";
         out << "iface:" << OLSR::node_id(entry->iface_addr()) << " ";
+        out << "net:" <<OLSR::node_id(entry->net_addr()) << " ";
+        out << "gate" <<OLSR::node_id(entry->gate_addr()) << " ";
+        out << "mask" <<OLSR::node_id(entry->netmask()) << " ";
         out << "dist:" << entry->dist() << " ";
         out <<"\n";
     }

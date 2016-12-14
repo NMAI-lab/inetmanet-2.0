@@ -44,6 +44,8 @@ class OLSR_state : public cObject
     mprselset_t mprselset_; ///< MPR Selector Set (RFC 3626, section 4.3.4).
     dupset_t    dupset_;    ///< Duplicate Set (RFC 3626, section 3.4).
     ifaceassocset_t ifaceassocset_; ///< Interface Association Set (RFC 3626, section 4.1).
+    associationset_t associationset_; ///< Association Set (RFC 3626, section 12.2).
+    associations_t associations_; ///< Associations (RFC 3626, section 12.5).
 
     inline  linkset_t&      linkset()   { return linkset_; }
     inline  mprset_t&       mprset()    { return mprset_; }
@@ -53,6 +55,8 @@ class OLSR_state : public cObject
     inline  topologyset_t&      topologyset()   { return topologyset_; }
     inline  dupset_t&       dupset()    { return dupset_; }
     inline  ifaceassocset_t&    ifaceassocset() { return ifaceassocset_; }
+    inline  associationset_t&   associationset() { return associationset_;}
+    inline  associations_t&     associations() { return associations_;}
 
     OLSR_mprsel_tuple*  find_mprsel_tuple(const nsaddr_t &);
     void            erase_mprsel_tuple(OLSR_mprsel_tuple*);
@@ -97,6 +101,14 @@ class OLSR_state : public cObject
     void            erase_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
     void            insert_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
     void            clear_all();
+
+
+    OLSR_association_tuple* find_association_tuple(const nsaddr_t &, const nsaddr_t &, const nsaddr_t &);
+    void            erase_association_tuple (OLSR_association_tuple*);
+    void            insert_association_tuple (OLSR_association_tuple*);
+    void            erase_association (OLSR_association*);
+    void            insert_association (OLSR_association*);
+
 
     OLSR_state() {}
     ~OLSR_state();

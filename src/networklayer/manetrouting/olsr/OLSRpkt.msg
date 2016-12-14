@@ -34,6 +34,8 @@ typedef ManetAddress nsaddr_t;
 #define OLSR_TC_MSG     2
 /// %OLSR MID message type.
 #define OLSR_MID_MSG        3
+/// %OLSR HNA message type.
+#define OLSR_HNA_MSG		4
 
 
 /// %OLSR HELLO message type.
@@ -42,6 +44,8 @@ typedef ManetAddress nsaddr_t;
 #define OLSR_ETX_TC_MSG     OLSR_TC_MSG
 /// %OLSR MID message type.
 #define OLSR_ETX_MID_MSG    OLSR_MID_MSG
+/// %OLSR HNA message type.
+#define OLSR_EXT_HNA_MSG	OLSR_HNA_MSG
 
 /********** Packets stuff **********/
 
@@ -94,6 +98,10 @@ class OlsrAddressSize
 /// Size (in bytes) of tc header.
 #define OLSR_TC_HDR_SIZE    4
 #define OLSR_ETX_TC_HDR_SIZE OLSR_TC_HDR_SIZE
+
+/// Size (in bytes) of hna header.
+#define OLSR_HNA_HDR_SIZE    4
+#define OLSR_ETX_HNA_HDR_SIZE OLSR_HNA_HDR_SIZE
 
 
 typedef struct OLSR_ETX_iface_address {
@@ -221,7 +229,7 @@ typedef struct OLSR_hello :cObject {
 
 
 /// %OLSR TC message.
-typedef struct OLSR_tc :cObject{
+typedef struct OLSR_tc :cObject {
 
         /// Advertised Neighbor Sequence Number.
     uint16_t    ansn_;
@@ -238,6 +246,7 @@ typedef struct OLSR_tc :cObject{
     inline  OLSR_ETX_iface_address& nb_etx_main_addr(int i) { return nb_main_addrs_[i]; }
     inline void set_qos_behaviour(int bh) {for(int i=0;i<OLSR_MAX_ADDRS;i++) nb_main_addrs_[i].parameter_qos_=bh;}
     inline  uint32_t size() { return OLSR_TC_HDR_SIZE + count*OlsrAddressSize::ADDR_SIZE; }
+    
 } OLSR_tc;
 
 #if 0
@@ -250,7 +259,7 @@ typedef struct OLSR_tc :cObject{
     uint16_t    reserved_;
     /// List of neighbors' main addresses.
     nsaddr_t    nb_main_addrs_[OLSR_MAX_ADDRS];
-    /// Number of neighbors' main addresses contained in nb_main_addrs_.
+    /// List of OLSR_tc_msg.
     int     count;
 
     inline  uint16_t&   ansn()          { return ansn_; }
@@ -258,7 +267,7 @@ typedef struct OLSR_tc :cObject{
     inline  nsaddr_t&   nb_main_addr(int i) { return nb_main_addrs_[i]; }
 
     inline  uint32_t size() { return OLSR_TC_HDR_SIZE + count*OlsrAddressSize::ADDR_SIZE; }
-
+    
 } OLSR_tc;
 #endif
 
@@ -277,9 +286,56 @@ typedef struct OLSR_mid :cObject{
 
 } OLSR_mid;
 
+// %OLSR HNA message.
+typedef struct OLSR_hna :cObject{
+
+
+    /// address of an associated network
+    nsaddr_t 	associations_net_addr_;
+    /// mask of an associated network
+    nsaddr_t 	associations_netmask_;
+    /// List of neighbors' main addresses.
+    OLSR_ETX_iface_address  nb_main_addrs_[OLSR_MAX_ADDRS];
+    
+    /// Number of network addresses contained in associations_.
+    int     count;
+
+    inline  nsaddr_t&   associations_net_addr() { return associations_net_addr_; }
+    inline  nsaddr_t&   associations_netmask() { return associations_netmask_; }
+    inline 	OLSR_ETX_iface_address&  nb_etx_iface_addr(int i)  { return nb_main_addrs_[i]; }
+    inline  uint32_t size() { return OLSR_HNA_HDR_SIZE + count*OlsrAddressSize::ADDR_SIZE; }
+	
+} OLSR_hna;
+
+#if 0
+// %OLSR HNA message.
+typedef struct OLSR_hna :cObject{
+
+
+    /// address of an associated network
+    nsaddr_t 	associations_net_addr_;
+    /// mask of an associated network
+    nsaddr_t 	associations_netmask_;
+    /// List of interface addresses.
+    nsaddr_t    iface_addrs_[OLSR_MAX_ADDRS];
+    
+    /// Number of network addresses contained in associations_.
+    int     count;
+
+    inline  nsaddr_t&   associations_net_addr() { return associations_net_addr_; }
+    inline  nsaddr_t&   associations_netmask() { return associations_netmask_; }
+    inline 	nsaddr_t & iface_addr(int i) { return iface_addrs_[i]; }
+    void    setIface_addr(int i,nsaddr_t a) {iface_addrs_[i]=a; }
+    
+    inline  uint32_t size() { return OLSR_HNA_HDR_SIZE + count*OlsrAddressSize::ADDR_SIZE; }
+	
+} OLSR_hna;
+#endif
+
 #define MidSize sizeof (OLSR_mid)
 #define HelloSize sizeof (OLSR_hello)
 #define TcSize sizeof(OLSR_tc)
+#define HnaSize sizeof(OLSR_hna)
 
 #define MAXBODY (HelloSize > TcSize ?  (HelloSize > MidSize? HelloSize: MidSize):(TcSize > MidSize? TcSize:MidSize))
 
@@ -289,17 +345,20 @@ public:
     OLSR_hello  hello_;
     OLSR_tc     tc_;
     OLSR_mid    mid_;
+    OLSR_hna	hna_;
 
 
     MsgBody(MsgBody &other){
             memcpy(&hello_,&other.hello_,sizeof(OLSR_hello));
             memcpy(&tc_,&other.tc_,sizeof(OLSR_tc));
             memcpy(&mid_,&other.mid_,sizeof(OLSR_mid));
+            memcpy(&hna_,&other.hna_,sizeof(OLSR_hna));
         }
     MsgBody(){
             memset(&hello_,0,sizeof(OLSR_hello));
             memset(&tc_,0,sizeof(OLSR_tc));
             memset(&mid_,0,sizeof(OLSR_mid));
+            memset(&hna_,0,sizeof(OLSR_hna));
           }
     ~MsgBody(){}
     MsgBody & operator =  (const MsgBody &other){
@@ -307,11 +366,13 @@ public:
                             memcpy(&hello_,&other.hello_,sizeof(OLSR_hello));
                             memcpy(&tc_,&other.tc_,sizeof(OLSR_tc));
                             memcpy(&mid_,&other.mid_,sizeof(OLSR_mid));
+                            memcpy(&hna_,&other.hna_,sizeof(OLSR_hna));
                 return *this;
             }
     OLSR_hello  * hello(){return &hello_;}
     OLSR_tc * tc(){return &tc_;}
     OLSR_mid* mid(){return &mid_;}
+    OLSR_hna * hna(){return &hna_;}
 
 
 };
@@ -339,6 +400,7 @@ typedef struct OLSR_msg {
     inline  OLSR_hello& hello()     { return *(msg_body_.hello()); }
     inline  OLSR_tc&    tc()        { return *(msg_body_.tc()); }
     inline  OLSR_mid&   mid()       { return *(msg_body_.mid()); }
+    inline  OLSR_hna&   hna()       { return *(msg_body_.hna()); }
 
 
     inline uint32_t size() {
@@ -349,6 +411,8 @@ typedef struct OLSR_msg {
             sz += tc().size();
         else if (msg_type() == OLSR_MID_MSG)
             sz += mid().size();
+        else if (msg_type() == OLSR_HNA_MSG)
+            sz += hna().size();
         return sz;
     }
     OLSR_msg(){}

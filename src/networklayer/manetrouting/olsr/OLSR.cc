@@ -31,6 +31,7 @@
 
 
 #include <math.h>
+#include <time.h>
 #include <limits.h>
 
 #include "UDPPacket.h"
@@ -52,7 +53,7 @@
 #define IP_DEF_TTL 32
 
 #define MULTIPLE_IFACES_SUPPORT
-#define state_      (*state_ptr)
+#define state_ (*state_ptr)
 
 ///
 /// \brief Function called by MAC layer when cannot deliver a packet.
@@ -147,7 +148,13 @@ void
 OLSR_TcTimer::expire()
 {
     if (agent_->mprselset().size() > 0)
+    {
         agent_->send_tc();
+    }
+    else
+       {
+           EV<<"not sending any TC, no one selected me as an MPR"<<endl;
+       }
     // agent_->scheduleAt(simTime()+agent_->tc_ival_- JITTER,this);
     agent_->timerQueuePtr->insert(std::pair<simtime_t, OLSR_Timer *>(simTime() + agent_->tc_ival() - agent_->jitter(), this));
 
@@ -168,6 +175,21 @@ OLSR_MidTimer::expire()
 //  agent_->scheduleAt(simTime()+agent_->mid_ival_- JITTER,this);
     agent_->timerQueuePtr->insert(std::pair<simtime_t, OLSR_Timer *>(simTime() + agent_->mid_ival() - agent_->jitter(), this));
 #endif
+}
+
+///
+/// \brief Sends a HNA message (if there exists any MPR selector) and reschedules the HNA timer.
+/// \param e The event which has expired.
+///
+void
+OLSR_HnaTimer::expire()
+{
+    agent_->send_hna();
+     EV<<" no associations to advertise"<<endl;
+
+    // agent_->scheduleAt(simTime()+agent_->hna_ival_- JITTER,this);
+    agent_->timerQueuePtr->insert(std::pair<simtime_t, OLSR_Timer *>(simTime() + agent_->hna_ival() - agent_->jitter(), this));
+
 }
 
 ///
@@ -427,6 +449,36 @@ OLSR_IfaceAssocTupleTimer::~OLSR_IfaceAssocTupleTimer()
 }
 
 
+void
+OLSR_AssociationTupleTimer::expire()
+{
+    OLSR_association_tuple* tuple = dynamic_cast<OLSR_association_tuple*> (tuple_);
+    double time = tuple->time();
+    if (time < SIMTIME_DBL(simTime()))
+    {
+        removeTimer();
+        delete this;
+    }
+    else
+    {
+//      agent_->scheduleAt (simTime()+DELAY_T(time),this);
+        agent_->timerQueuePtr->insert(std::pair<simtime_t, OLSR_Timer *>(simTime()+DELAY_T(time), this));
+    }
+}
+
+OLSR_AssociationTupleTimer::~OLSR_AssociationTupleTimer()
+{
+    removeTimer();
+    if (!tuple_)
+        return;
+    OLSR_association_tuple* tuple = dynamic_cast<OLSR_association_tuple*> (tuple_);
+    tuple->asocTimer = NULL;
+    if (agent_->state_ptr==NULL)
+        return;
+    agent_->rm_association_tuple(tuple);
+    delete tuple_;
+}
+
 ///
 /// \brief Sends a control packet which must bear every message in the OLSR agent's buffer.
 ///
@@ -460,12 +512,12 @@ void OLSR::initialize(int stage)
            this->setAddressSize(6);
 
        OlsrAddressSize::ADDR_SIZE = this->getAddressSize();
-	///
-	/// \brief Period at which a node must cite every link and every neighbor.
-	///
-	/// We only use this value in order to define OLSR_NEIGHB_HOLD_TIME.
-	///
-	    OLSR_REFRESH_INTERVAL=par("OLSR_REFRESH_INTERVAL");
+    ///
+    /// \brief Period at which a node must cite every link and every neighbor.
+    ///
+    /// We only use this value in order to define OLSR_NEIGHB_HOLD_TIME.
+    ///
+        OLSR_REFRESH_INTERVAL=par("OLSR_REFRESH_INTERVAL");
 
         //
         // Do some initializations
@@ -473,6 +525,7 @@ void OLSR::initialize(int stage)
         hello_ival_ = &par("Hello_ival");
         tc_ival_ = &par("Tc_ival");
         mid_ival_ = &par("Mid_ival");
+        hna_ival_ = &par("Hna_ival");
         use_mac_ = par("use_mac");
 
 
@@ -502,6 +555,7 @@ void OLSR::initialize(int stage)
         helloTimer = new OLSR_HelloTimer(); ///< Timer for sending HELLO messages.
         tcTimer = new OLSR_TcTimer();   ///< Timer for sending TC messages.
         midTimer = new OLSR_MidTimer(); ///< Timer for sending MID messages.
+        hnaTimer = new OLSR_HnaTimer();   ///< Timer for sending HNA messages.
 
         state_ptr = new OLSR_state();
 
@@ -524,6 +578,7 @@ void OLSR::initialize(int stage)
         hello_timer_.resched(hello_ival());
         tc_timer_.resched(hello_ival());
         mid_timer_.resched(hello_ival());
+        hna_timer_.resched(hello_ival());
         if (use_mac())
         {
             linkLayerFeeback();
@@ -718,6 +773,8 @@ OLSR::recv_olsr(cMessage* msg)
                 process_tc(msg, src_addr, index);
             else if (msg.msg_type() == OLSR_MID_MSG)
                 process_mid(msg, src_addr, index);
+            else if (msg.msg_type() == OLSR_HNA_MSG)
+                process_hna(msg, src_addr, index);
             else
             {
                 debug("%f: Node %s can not process OLSR packet because does not "
@@ -1313,6 +1370,7 @@ OLSR::rtable_computation()
                 if (get_main_addr(link_tuple->nb_iface_addr()) == nb_tuple->nb_main_addr() && link_tuple->time() >= CURRENT_TIME)
                 {
                     lt = link_tuple;
+
                     rtable_.add_entry(link_tuple->nb_iface_addr(),
                                       link_tuple->nb_iface_addr(),
                                       link_tuple->local_iface_addr(),
@@ -1350,7 +1408,7 @@ OLSR::rtable_computation()
                                    lt->nb_iface_addr(),
                                    netmask,// Default mask
                                    1, false, lt->local_iface_index());
-            }
+                }
         }
     }
 
@@ -1504,7 +1562,50 @@ OLSR::rtable_computation()
         prev_rtablesize = rtable_.size();
     }
 
-}
+// 6. For each tuple in the association set,
+//    If there is no entry in the routing table with:
+//    R_dest_addr == A_network_addr/A_netmask
+//    and if the announced network is not announced by the node itself,
+//    then a new routing entry is created.
+    for (associationset_t::iterator it = associationset().begin();
+                    it != associationset().end();
+                    it++)
+    {
+        bool added = false;
+
+        // Test if HNA associations received from other gateways
+        // are also announced by this node. In such a case, no route
+        // is created for this association tuple (go to the next one).
+        OLSR_association_tuple* tuple = *it;
+        OLSR_rt_entry* entry1 = rtable_.lookup1(tuple->net_addr(), netmask);
+        if (entry1 == NULL)
+         {
+
+           rtable_.add_entry(tuple->net_addr(),
+                             netmask,
+                             entry1->iface_addr(),
+                             entry1->dist(), entry1->local_iface_index(), entry1);
+
+            if (!useIndex)
+               omnet_chg_rte(tuple->net_addr(),
+                             netmask,
+                             entry1->next_addr(),
+                             entry1->dist(),  false, entry1->local_iface_index());
+            else
+               omnet_chg_rte(tuple->net_addr(),
+                             netmask,
+                             entry1->next_addr(),
+                             entry1->dist(), false, entry1->local_iface_index());
+              added = true;
+    }
+        if (!added)
+          break;
+   }
+
+
+
+
+    }
 
 ///
 /// \brief Processes a HELLO message following RFC 3626 specification.
@@ -1526,6 +1627,7 @@ OLSR::process_hello(OLSR_msg& msg, const nsaddr_t &receiver_iface, const nsaddr_
     populate_nb2hopset(msg);
     mpr_computation();
     populate_mprselset(msg);
+    EV << "HELLO .... !!!!" << endl;
     return false;
 }
 
@@ -1571,6 +1673,7 @@ OLSR::process_tc(OLSR_msg& msg, const nsaddr_t &sender_iface, const int &index)
     // the TC message:
     for (int i = 0; i < tc.count; i++)
     {
+        EV << "PROCESS TC !!!!" << endl;
         assert(i >= 0 && i < OLSR_MAX_ADDRS);
         nsaddr_t addr = tc.nb_main_addr(i);
         // 4.1. If there exist some tuple in the topology set where:
@@ -1602,8 +1705,10 @@ OLSR::process_tc(OLSR_msg& msg, const nsaddr_t &sender_iface, const int &index)
                 new OLSR_TopologyTupleTimer(this, topology_tuple);
             topology_timer->resched(DELAY(topology_tuple->time()));
         }
+        EV << "PROCESS TC1 !!!!" << endl;
     }
     return false;
+
 }
 
 ///
@@ -1659,6 +1764,100 @@ OLSR::process_mid(OLSR_msg& msg, const nsaddr_t &sender_iface, const int &index)
         }
     }
 }
+
+
+///
+/// \brief Processes a HNA message following RFC 3626 specification.
+///
+/// The Topology Set is updated (if needed) with the information of
+/// the received in HNA message.
+///
+/// \param msg the %OLSR message which contains the HNA message.
+/// \param sender_iface the address of the interface where the message was sent from.
+///
+bool
+OLSR::process_hna(OLSR_msg& msg, const nsaddr_t &sender_iface, const int &index)
+{
+    assert(msg.msg_type() == OLSR_HNA_MSG);
+    double now = CURRENT_TIME;
+    std::set<int> hnacounter;
+    int changedTuples = 0;
+    OLSR_hna& hna = msg.hna();
+
+    // 1. If the sender interface of this message is not in the symmetric
+    // 1-hop neighborhood of this node, the message MUST be discarded.
+    OLSR_link_tuple* link_tuple = state_.find_sym_link_tuple(sender_iface, now);
+    if (link_tuple == NULL)
+        return false;
+    // 2. Otherwise, for each ( network address, netmask) pair in the
+    //message
+
+            // 2.1. if an entry in the association set already exists, where:
+            //  A_gateway_addr == originator address AND
+            //  A_network_addr == network address
+            //  A_netmask   == netmask
+            // then the holding time of that tuple MUST be set to:
+            //  T_time      =  current time + validity time.
+  for (std::vector<OLSR_association_tuple*>::iterator it = associationset().begin();
+          it != associationset().end();)
+  {
+      EV << "PROCESS HNA3 !!!!" << endl;
+      bool foundTuple = 0;
+              if ((*it)->gate_addr_ == msg.orig_addr()){ // for any tuple in the list that is
+                  // passing for this node
+                  for (int i = 0; i < hna.count; i++)
+                  {
+                      assert(i >= 0 && i < OLSR_MAX_ADDRS);
+                      nsaddr_t addr = msg.orig_addr();
+                      if((*it)->net_addr_ == addr){ // found a tuple to be updated
+
+                          (*it)->time() = now + OLSR::emf_to_seconds(msg.vtime());
+                          foundTuple = 1;
+                          hnacounter.insert(i);
+                          EV << "PROCESS HNA3 !!!!" << endl;
+
+                      }
+                  }
+                  if (!foundTuple){ // the tuple was not in present in the HNA, erase it
+                      changedTuples++;
+                      it = associationset().erase(it); // erase and increment iterator
+                      continue;
+                  }else{
+                      it++;
+                      continue;
+                  }
+              }
+              it++; // did not enter the main if, increment iterator
+  }
+
+                // 2.2. Otherwise, a new tuple MUST be recorded in the topology
+                // set where:
+                //  A_gateway_addr == originator address, AND
+                //  A_network_addr == network address,
+                //  A_netmask   == netmask,
+                //  T_time      = current time + validity time.
+  for (int i = 0; i < hna.count; i++)
+      {
+
+                  OLSR_association_tuple* association_tuple = new OLSR_association_tuple;
+                  association_tuple->gate_addr() = msg.orig_addr();
+                  association_tuple->net_addr();
+                  association_tuple->netmask();
+                  association_tuple->time() = now + OLSR::emf_to_seconds(msg.vtime());
+                  add_association_tuple(association_tuple);
+                  // Schedules association tuple deletion
+                  OLSR_AssociationTupleTimer* association_timer =
+                          new OLSR_AssociationTupleTimer(this, association_tuple);
+                  association_timer->resched(DELAY(association_tuple->time()));
+                  EV << "PROCESS HNA2 !!!!" << endl;
+
+      }
+  EV << "PROCESS HNA1 !!!!" << endl;
+  return false;
+
+}
+
+
 
 ///
 /// \brief OLSR's default forwarding algorithm.
@@ -1877,6 +2076,7 @@ OLSR::send_hello()
     std::map<uint8_t, int> linkcodes_count;
     for (linkset_t::iterator it = linkset().begin(); it != linkset().end(); it++)
     {
+        EV<< "HELLO !!!"<<endl;
         OLSR_link_tuple* link_tuple = *it;
         if (get_main_addr(link_tuple->local_iface_addr()) == ra_addr() && link_tuple->time() >= now)
         {
@@ -1891,6 +2091,7 @@ OLSR::send_hello()
                 link_type = OLSR_ASYM_LINK;
             else
                 link_type = OLSR_LOST_LINK;
+            EV << "SEND HELLO !!!!" << endl;
             // Establishes neighbor type.
             if (state_.find_mpr_addr(get_main_addr(link_tuple->nb_iface_addr())))
                 nb_type = OLSR_MPR_NEIGH;
@@ -1906,6 +2107,7 @@ OLSR::send_hello()
                     {
                         if (nb_tuple->getStatus() == OLSR_STATUS_SYM)
                             nb_type = OLSR_SYM_NEIGH;
+
                         else if (nb_tuple->getStatus() == OLSR_STATUS_NOT_SYM)
                             nb_type = OLSR_NOT_NEIGH;
                         else
@@ -1947,12 +2149,15 @@ OLSR::send_hello()
             msg.hello().hello_msg(count).count++;
             msg.hello().hello_msg(count).link_msg_size() =
                 msg.hello().hello_msg(count).size();
+
+            if (debugOutput) {EV << "HELLO MESSAGE"<< endl;}
+
         }
     }
-
     msg.msg_size() = msg.size();
 
     enque_msg(msg, JITTER);
+
 }
 
 ///
@@ -1968,19 +2173,22 @@ OLSR::send_tc()
     msg.ttl() = 255;
     msg.hop_count() = 0;
     msg.msg_seq_num() = msg_seq();
-
     msg.tc().ansn() = ansn_;
     msg.tc().reserved() = 0;
     msg.tc().count = 0;
 
     for (mprselset_t::iterator it = mprselset().begin(); it != mprselset().end(); it++)
     {
+        EV << "SEND TC !!!!" << endl;
         OLSR_mprsel_tuple* mprsel_tuple = *it;
         int count = msg.tc().count;
 
         assert(count >= 0 && count < OLSR_MAX_ADDRS);
         msg.tc().nb_main_addr(count) = mprsel_tuple->main_addr();
         msg.tc().count++;
+
+        if (debugOutput) {EV << "TC MESSAGE"<< endl;}
+
     }
 
     msg.msg_size() = msg.size();
@@ -2013,7 +2221,7 @@ OLSR::send_mid()
         msg.mid().setIface_addr(i,addr);
         msg.mid().count++;
     }
-    //foreach iface in this_node do
+    //for each iface in this_node do
     //  msg.mid().iface_addr(i) = iface
     //  msg.mid().count++
     //done
@@ -2023,6 +2231,73 @@ OLSR::send_mid()
     enque_msg(msg, JITTER);
 }
 
+
+void
+OLSR::send_hna()
+{
+    OLSR_msg msg;
+    msg.msg_type() = OLSR_HNA_MSG;
+    msg.vtime() = OLSR::seconds_to_emf(OLSR_TOP_HOLD_TIME);
+    msg.orig_addr() = ra_addr();
+    msg.ttl() = 255;
+    msg.hop_count() = 0;
+    msg.msg_seq_num() = msg_seq();
+
+    std::map<uint8_t, int> linkcodes_count;
+   // Add all local HNA associations to the HNA message
+
+    for (associations_t::iterator it = associations().begin();
+            it != associations().end(); it++) {
+        EV << "SEND HNA1 !!!!" << endl;
+        OLSR_association* association = *it;
+        association->net_addr();
+        association->netmask();
+        int count = msg.hna().count;
+        assert(count >= 0 && count < OLSR_MAX_ADDRS);
+        msg.hna().count++;
+
+        if (debugOutput) { EV << "HNA MESSAGE" << endl;}
+        getParentModule()->getParentModule()->bubble("HNA MESSAGE.");
+
+    }
+    // If there is no HNA associations to send, return without queuing the message
+    if (associations().size () == 0)
+    {
+        EV << "NO HNA MESSAGES HERE " << endl;
+        return;
+    }
+    msg.msg_size() = msg.size();
+
+    // Else, queue the message to be sent later on
+    enque_msg(msg, JITTER);
+
+
+}
+
+void
+OLSR::add_association (OLSR_association* tuple)
+ {
+   // Check if the (networkAddr, netmask) tuple already exist
+   // in the list of local HNA associations
+   for (associations_t::iterator it = associations().begin ();
+        it != associations().end (); it++)
+     {
+       if ( *it == tuple)
+         {
+           return;
+         }
+     }
+   // If the tuple does not already exist, add it to the list of local HNA associations.
+   state_.insert_association(tuple);
+ }
+
+void
+OLSR::rm_association (OLSR_association* tuple)
+{
+    state_.erase_association(tuple);
+}
+
+
 ///
 /// \brief  Updates Link Set according to a new received HELLO message (following RFC 3626
 ///     specification). Neighbor Set is also updated if needed.
@@ -2031,6 +2306,8 @@ OLSR::send_mid()
 /// \param receiver_iface the address of the interface where the message was received from.
 /// \param sender_iface the address of the interface where the message was sent from.
 ///
+
+
 bool
 OLSR::link_sensing(OLSR_msg& msg, const nsaddr_t &receiver_iface, const nsaddr_t &sender_iface, const int &index)
 {
@@ -2125,6 +2402,7 @@ OLSR::populate_nbset(OLSR_msg& msg)
         nb_tuple->willingness() = hello.willingness();
     return false;
 }
+
 
 ///
 /// \brief  Updates the 2-hop Neighbor Set according to the information contained in a new
@@ -2259,6 +2537,7 @@ OLSR::populate_mprselset(OLSR_msg& msg)
     }
 }
 
+
 ///
 /// \brief  Drops a given packet because it couldn't be delivered to the corresponding
 ///     destination by the MAC layer. This may cause a neighbor loss, and appropiate
@@ -2322,6 +2601,16 @@ OLSR::set_mid_timer()
 {
     mid_timer_.resched(mid_ival() - JITTER);
 }
+
+///
+/// \brief Schedule the timer used for sending HNA messages.
+///
+void
+OLSR::set_hna_timer()
+{
+    hna_timer_.resched(hna_ival() - JITTER);
+}
+
 
 ///
 /// \brief Performs all actions needed when a neighbor loss occurs.
@@ -2664,6 +2953,47 @@ OLSR::rm_ifaceassoc_tuple(OLSR_iface_assoc_tuple* tuple)
 }
 
 ///
+/// \brief Adds a association tuple to the Topology Set.
+///
+/// \param tuple the association tuple to be added.
+///
+
+void
+OLSR::add_association_tuple(OLSR_association_tuple* tuple)
+{
+    debug("%f: Node %s adds association tuple: nb_addr = %s\n",
+              CURRENT_TIME,
+              getNodeId(ra_addr()),
+              getNodeId(tuple->net_addr()),
+              getNodeId(tuple->netmask()));
+    state_.insert_association_tuple(tuple);
+        ansn_ = (ansn_ + 1)%(OLSR_MAX_SEQ_NUM + 1);
+
+}
+
+
+///
+/// \brief Removes an association tuple from the Topology Set.
+///
+/// \param tuple the association tuple to be removed.
+///
+
+void
+OLSR::rm_association_tuple(OLSR_association_tuple* tuple)
+{
+    debug("%f: Node %s removes association tuple: nb_addr = %s\n",
+                 CURRENT_TIME,
+                 getNodeId(ra_addr()),
+                 getNodeId(tuple->net_addr()),
+                 getNodeId(tuple->netmask()));
+    state_.erase_association_tuple(tuple);
+           ansn_ = (ansn_ + 1)%(OLSR_MAX_SEQ_NUM + 1);
+
+}
+
+
+
+///
 /// \brief Gets the main address associated with a given interface address.
 ///
 /// \param iface_addr the interface address.
@@ -2700,6 +3030,7 @@ OLSR::seq_num_bigger_than(uint16_t s1, uint16_t s2)
 /// \param tuple the neighbor tuple which has the main address of the node we are going to calculate its degree to.
 /// \return the degree of the node.
 ///
+
 int
 OLSR::degree(OLSR_nb_tuple* tuple)
 {
@@ -2825,10 +3156,12 @@ void OLSR::finish()
     cancelAndDelete(&hello_timer_);
     cancelAndDelete(&tc_timer_);
     cancelAndDelete(&mid_timer_);
+    cancelAndDelete(&hna_timer_);
 
     helloTimer= NULL;   ///< Timer for sending HELLO messages.
     tcTimer= NULL;  ///< Timer for sending TC messages.
     midTimer = NULL;    ///< Timer for sending MID messages.
+    hnaTimer= NULL;  ///< Timer for sending HNA messages.
     */
 }
 
@@ -2859,6 +3192,8 @@ OLSR::~OLSR()
             cancelAndDelete(&tc_timer_);
         if (&mid_timer_!=NULL)
             cancelAndDelete(&mid_timer_);
+        if (&hna_timer_!=NULL)
+            cancelAndDelete(&hna_timer_);
     */
     if (timerMessage)
     {
@@ -2877,6 +3212,8 @@ OLSR::~OLSR()
             tcTimer = NULL;
         else if (midTimer==timer)
             midTimer = NULL;
+        else if (hnaTimer==timer)
+            hnaTimer = NULL;
         delete timer;
     }
 
@@ -2894,6 +3231,12 @@ OLSR::~OLSR()
     {
         delete midTimer;
         midTimer = NULL;
+    }
+
+    if (hnaTimer)
+    {
+        delete hnaTimer;
+        hnaTimer = NULL;
     }
 
     if (timerQueuePtr)
@@ -3226,6 +3569,7 @@ bool OLSR::handleNodeStart(IDoneCallback *doneCallback)
     hello_timer_.resched(hello_ival());
     tc_timer_.resched(hello_ival());
     mid_timer_.resched(hello_ival());
+    hna_timer_.resched(hello_ival());
     scheduleNextEvent();
     return true;
 }
@@ -3247,6 +3591,8 @@ bool OLSR::handleNodeShutdown(IDoneCallback *doneCallback)
         else if (tcTimer==timer)
             continue;
         else if (midTimer==timer)
+            continue;
+        else if (hnaTimer==timer)
             continue;
         delete timer;
     }
@@ -3270,6 +3616,8 @@ void OLSR::handleNodeCrash()
         else if (tcTimer==timer)
             continue;
         else if (midTimer==timer)
+            continue;
+        else if (hnaTimer==timer)
             continue;
         delete timer;
     }

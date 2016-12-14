@@ -106,6 +106,8 @@
 #define OLSR_DUP_HOLD_TIME  30
 	/// MID holding time.
 #define OLSR_MID_HOLD_TIME  3 * mid_ival()
+    /// HNA holding time.
+#define OLSR_HNA_HOLD_TIME  3 * hna_ival()
 
 /********** Link types **********/
 
@@ -155,7 +157,9 @@
 /// Random number between [0-OLSR_MAXJITTER] used to jitter OLSR packet transmission.
 //#define JITTER            (Random::uniform()*OLSR_MAXJITTER)
 
-class OLSR;         // forward declaration
+class OLSR;         // forward declaratio
+
+
 
 /********** Timers **********/
 
@@ -217,6 +221,15 @@ class OLSR_MidTimer : public OLSR_Timer
     virtual void expire();
 };
 
+
+/// Timer for sending HNA messages.
+class OLSR_HnaTimer : public OLSR_Timer
+{
+  public:
+    OLSR_HnaTimer(OLSR* agent) : OLSR_Timer(agent) {}
+    OLSR_HnaTimer():OLSR_Timer() {}
+    void expire();
+};
 
 
 /// Timer for removing duplicate tuples: OLSR_dup_tuple.
@@ -325,6 +338,23 @@ class OLSR_IfaceAssocTupleTimer : public OLSR_Timer
 
 };
 
+/// Timer for removing association tuples: OLSR_association_tuple.
+class OLSR_AssociationTupleTimer : public OLSR_Timer
+{
+  public:
+    OLSR_AssociationTupleTimer(OLSR* agent, OLSR_association_tuple* tuple) : OLSR_Timer(agent)
+    {
+        tuple_ = tuple;
+    }
+
+    void setTuple(OLSR_association_tuple* tuple) {tuple_ = tuple; tuple->asocTimer = this;}
+    ~OLSR_AssociationTupleTimer();
+    virtual void expire();
+//  protected:
+//  OLSR_association_tuple* tuple_; ///< OLSR_association which must be removed.
+
+};
+
 /********** OLSR Agent **********/
 
 
@@ -358,12 +388,14 @@ class OLSR : public ManetRoutingBase
     friend class OLSR_HelloTimer;
     friend class OLSR_TcTimer;
     friend class OLSR_MidTimer;
+    friend class OLSR_HnaTimer;
     friend class OLSR_DupTupleTimer;
     friend class OLSR_LinkTupleTimer;
     friend class OLSR_Nb2hopTupleTimer;
     friend class OLSR_MprSelTupleTimer;
     friend class OLSR_TopologyTupleTimer;
     friend class OLSR_IfaceAssocTupleTimer;
+    friend class OLSR_AssociationTupleTimer;
     friend class OLSR_MsgTimer;
     friend class OLSR_Timer;
   protected:
@@ -406,6 +438,8 @@ class OLSR : public ManetRoutingBase
     cPar     *tc_ival_;
     /// MID messages' emission interval.
     cPar     *mid_ival_;
+    /// HNA messages' emission interval.
+    cPar     *hna_ival_;
     /// Willingness for forwarding packets on behalf of other nodes.
     cPar     *willingness_;
     /// Determines if layer 2 notifications are enabled or not.
@@ -431,10 +465,12 @@ class OLSR : public ManetRoutingBase
     OLSR_HelloTimer *helloTimer;    ///< Timer for sending HELLO messages.
     OLSR_TcTimer    *tcTimer;   ///< Timer for sending TC messages.
     OLSR_MidTimer   *midTimer;  ///< Timer for sending MID messages.
+    OLSR_HnaTimer   *hnaTimer;   ///< Timer for sending HNA messages.
 
 #define hello_timer_  (*helloTimer)
 #define  tc_timer_  (*tcTimer)
 #define mid_timer_  (*midTimer)
+#define  hna_timer_  (*hnaTimer)
 
     /// Increments packet sequence number and returns the new value.
     inline uint16_t pkt_seq()
@@ -454,6 +490,7 @@ class OLSR : public ManetRoutingBase
     inline double     hello_ival()    { return hello_ival_->doubleValue();}
     inline double     tc_ival()   { return tc_ival_->doubleValue();}
     inline double     mid_ival()  { return mid_ival_->doubleValue();}
+    inline double     hna_ival()   { return hna_ival_->doubleValue();}
     inline int     willingness()   { return willingness_->longValue();}
     inline int     use_mac()   { return use_mac_;}
 
@@ -465,6 +502,9 @@ class OLSR : public ManetRoutingBase
     inline topologyset_t&   topologyset()   { return state_ptr->topologyset(); }
     inline dupset_t&    dupset()    { return state_ptr->dupset(); }
     inline ifaceassocset_t& ifaceassocset() { return state_ptr->ifaceassocset(); }
+    inline associationset_t& associationset() { return state_ptr->associationset();}
+    inline associations_t& associations() { return state_ptr->associations();}
+
 
     virtual void        recv_olsr(cMessage*);
 
@@ -475,6 +515,7 @@ class OLSR : public ManetRoutingBase
     virtual bool        process_hello(OLSR_msg&, const nsaddr_t &, const nsaddr_t &, const int &);
     virtual bool        process_tc(OLSR_msg&, const nsaddr_t &, const int &);
     virtual void        process_mid(OLSR_msg&, const nsaddr_t &, const int &);
+    virtual bool        process_hna(OLSR_msg&, const nsaddr_t &, const int &);
 
     virtual void        forward_default(OLSR_msg&, OLSR_dup_tuple*, const nsaddr_t &, const nsaddr_t &);
     virtual void        forward_data(cMessage* p) {}
@@ -483,6 +524,7 @@ class OLSR : public ManetRoutingBase
     virtual void        send_hello();
     virtual void        send_tc();
     virtual void        send_mid();
+    virtual void        send_hna();
     virtual void        send_pkt();
 
     virtual bool        link_sensing(OLSR_msg&, const nsaddr_t &, const nsaddr_t &, const int &);
@@ -493,6 +535,7 @@ class OLSR : public ManetRoutingBase
     virtual void        set_hello_timer();
     virtual void        set_tc_timer();
     virtual void        set_mid_timer();
+    virtual void        set_hna_timer();
 
     virtual void        nb_loss(OLSR_link_tuple*);
     virtual void        add_dup_tuple(OLSR_dup_tuple*);
@@ -510,6 +553,8 @@ class OLSR : public ManetRoutingBase
     virtual void        rm_topology_tuple(OLSR_topology_tuple*);
     virtual void        add_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
     virtual void        rm_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
+    virtual void        add_association_tuple(OLSR_association_tuple*);
+    virtual void        rm_association_tuple(OLSR_association_tuple*);
     virtual OLSR_nb_tuple*    find_or_add_nb(OLSR_link_tuple*, uint8_t willingness);
 
     const nsaddr_t  & get_main_addr(const nsaddr_t&) const;
@@ -537,10 +582,13 @@ class OLSR : public ManetRoutingBase
     OLSR() {}
     virtual ~OLSR();
 
+    virtual void add_association(OLSR_association*);
+    virtual void rm_association(OLSR_association*);
 
     static double       emf_to_seconds(uint8_t);
     static uint8_t      seconds_to_emf(double);
     static int      node_id(const nsaddr_t&);
+
 
     // Routing information access
     virtual bool supportGetRoute() {return true;}
@@ -563,6 +611,7 @@ class OLSR : public ManetRoutingBase
     virtual bool handleNodeStart(IDoneCallback *doneCallback);
     virtual bool handleNodeShutdown(IDoneCallback *doneCallback);
     virtual void handleNodeCrash();
+    bool debugOutput;           /**< debug output ? */
 
 };
 

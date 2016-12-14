@@ -40,6 +40,7 @@ class OLSROPT : public OLSR
     friend class OLSR_HelloTimer;
     friend class OLSR_TcTimer;
     friend class OLSR_MidTimer;
+    friend class OLSR_HnaTimer;
     friend class OLSR_DupTupleTimer;
     friend class OLSR_LinkTupleTimer;
     friend class OLSR_Nb2hopTupleTimer;
@@ -59,7 +60,9 @@ class OLSROPT : public OLSR
 
     virtual bool        process_hello(OLSR_msg&, const nsaddr_t &, const nsaddr_t &, const int &);
     virtual bool        process_tc(OLSR_msg&, const nsaddr_t &, const int &);
+    virtual bool        process_hna(OLSR_msg&, const nsaddr_t &, const int &);
     virtual int         update_topology_tuples(OLSR_msg msg, int index);
+    virtual int         update_association_tuples(OLSR_msg msg, int index);
     virtual void nb_loss(OLSR_link_tuple* tuple);
 
 };

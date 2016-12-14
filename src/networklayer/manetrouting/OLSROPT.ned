@@ -30,7 +30,7 @@ import inet.networklayer.IManetRouting;
 //
 // NOTE:
 //  - The initialization of the routing component is done in stage=4
-//  - hello, tc, mid intervals accept INTEGER values only
+//  - hello, tc, mid and hna intervals accept INTEGER values only
 //  - IPv4 addresses are assumed in the messages. If you need IPv6 recompile with -DOLSR_IPv6 added to CFLAGS
 //  - Multiple interfaces per OLSR node is supported only with adding -DMULTIPLE_IFACES_SUPPORT to CFLAGS
 //

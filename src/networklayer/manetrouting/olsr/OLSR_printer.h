@@ -54,6 +54,7 @@ class OLSR_printer
     static void print_olsr_hello(FILE*, OLSR_hello&);
     static void print_olsr_tc(FILE*, OLSR_tc&);
     static void print_olsr_mid(FILE*, OLSR_mid&);
+    static void print_olsr_hna(FILE*, OLSR_hna&);
 #if 0
   public:
     static void print_cmn_hdr(FILE*, struct hdr_cmn*);

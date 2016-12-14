@@ -42,6 +42,7 @@ simple OLSR extends BaseRouting like IManetRouting
         double Hello_ival @unit(s) = default(2s); // (s) HELLO messages' emission interval. (section 6.2)
         double Tc_ival @unit(s) = default(5s); // (s) Topology Control (TC) messages' emission interval. (section 9.3)
         double Mid_ival @unit(s) = default(5s); // (s) MID (multiple interface declaration) messages' emission interval. (section 5.2) (has effect only if compiled with multiple interface support)
+        double Hna_ival @unit(s) = default(5s); // (s) Host and Network Association (HNA) messages' emission interval. (section 12.2)
         int use_mac = default(0); // Determines if layer 2 notifications are enabled or not (chapter 13)
         bool UseIndex = default(false); // use the interface index instead the ip to identify the interface (EXPERIMENTAL)
         bool reduceFuncionality = default(false);

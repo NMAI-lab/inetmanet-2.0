@@ -120,6 +120,9 @@ OLSROPT::recv_olsr(cMessage* msg)
             }
             else if (msg.msg_type() == OLSR_MID_MSG)
                 process_mid(msg, src_addr, index);
+            else if (msg.msg_type() == OLSR_HNA_MSG){
+                recalculateRoutes += process_hna(msg, src_addr, index);
+                        }
             else
             {
                 debug("%f: Node %s can not process OLSR packet because does not "
@@ -320,6 +323,97 @@ OLSROPT::update_topology_tuples(OLSR_msg msg, int index)
 }
 
 
+bool
+OLSROPT::process_hna(OLSR_msg& msg, const nsaddr_t &sender_iface, const int &index)
+{
+    assert(msg.msg_type() == OLSR_HNA_MSG);
+    double now = CURRENT_TIME;
+    std::set<int> hnacounter;
+    int changedTuples = 0;
+    OLSR_hna& hna = msg.hna();
+
+    // 1. If the sender interface of this message is not in the symmetric
+    // 1-hop neighborhood of this node, the message MUST be discarded.
+    OLSR_link_tuple* link_tuple = state_.find_sym_link_tuple(sender_iface, now);
+    if (link_tuple == NULL)
+        return false;
+    // 2. Otherwise, for each ( network address, netmask) pair in the
+    //message
+
+            // 2.1. if an entry in the association set already exists, where:
+            //  A_gateway_addr == originator address AND
+            //  A_network_addr == network address
+            //  A_netmask   == netmask
+            // then the holding time of that tuple MUST be set to:
+            //  T_time      =  current time + validity time.
+  for (std::vector<OLSR_association_tuple*>::iterator it = associationset().begin();
+          it != associationset().end();)
+  {
+      bool foundTuple = 0;
+              if ((*it)->gate_addr_ == msg.orig_addr()){ // for any tuple in the list that is
+                  // passing for this node
+                  for (int i = 0; i < hna.count; i++)
+                  {
+                      assert(i >= 0 && i < OLSR_MAX_ADDRS);
+                      nsaddr_t addr = msg.orig_addr();
+                      if((*it)->net_addr_ == addr){ // found a tuple to be updated
+
+                          (*it)->time() = now + OLSROPT::emf_to_seconds(msg.vtime());
+                          foundTuple = 1;
+                          hnacounter.insert(i);
+
+                      }
+                  }
+                  if (!foundTuple){ // the tuple was not in present in the HNA, erase it
+                      changedTuples++;
+                      it = associationset().erase(it); // erase and increment iterator
+                      continue;
+                  }else{
+                      it++;
+                      continue;
+                  }
+              }
+              it++; // did not enter the main if, increment iterator
+  }
+  return update_association_tuples(msg, index);
+}
+
+int
+OLSROPT::update_association_tuples(OLSR_msg msg, int index)
+{
+    double now = CURRENT_TIME;
+    OLSR_hna& hna = msg.hna();
+    if (hna.count == 0)
+           return 0;
+    int changedTuples = 0; // needed to know if we have to recalculate the routes
+    std::set<int> hnacounter;
+
+                // 2.2. Otherwise, a new tuple MUST be recorded in the topology
+                // set where:
+                //  A_gateway_addr == originator address, AND
+                //  A_network_addr == network address,
+                //  A_netmask   == netmask,
+                //  T_time      = current time + validity time.
+  for (int i = 0; i < hna.count; i++)
+      {
+
+                  OLSR_association_tuple* association_tuple = new OLSR_association_tuple;
+                  association_tuple->gate_addr() = msg.orig_addr();
+                  association_tuple->net_addr();
+                  association_tuple->netmask();
+                  association_tuple->time() = now + OLSROPT::emf_to_seconds(msg.vtime());
+                  add_association_tuple(association_tuple);
+                  // Schedules association tuple deletion
+                  OLSR_AssociationTupleTimer* association_timer =
+                          new OLSR_AssociationTupleTimer(this, association_tuple);
+                  association_timer->resched(DELAY(association_tuple->time()));
+                  changedTuples++;
+      }
+  return changedTuples;
+    }
+
+
+
 ///
 /// \brief  Updates Link Set according to a new received HELLO message (following RFC 3626
 ///     specification). Neighbor Set is also updated if needed.
@@ -335,7 +429,7 @@ OLSROPT::link_sensing(OLSR_msg& msg, const nsaddr_t &receiver_iface, const nsadd
     double now = CURRENT_TIME;
     bool updated = false;
     bool created = false;
-    bool change = false;
+
 
     OLSR_link_tuple* link_tuple = state_.find_link_tuple(sender_iface);
     if (link_tuple == NULL)

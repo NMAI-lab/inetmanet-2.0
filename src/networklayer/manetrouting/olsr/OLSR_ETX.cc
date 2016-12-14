@@ -107,6 +107,7 @@ OLSR_ETX::initialize(int stage)
         hello_ival_ = &par("Hello_ival");
         tc_ival_ = &par("Tc_ival");
         mid_ival_ = &par("Mid_ival");
+        hna_ival_ = &par("Hna_ival");
         use_mac_ = par("use_mac");
 
 
@@ -161,6 +162,7 @@ OLSR_ETX::initialize(int stage)
         helloTimer = new OLSR_HelloTimer(); ///< Timer for sending HELLO messages.
         tcTimer = new OLSR_TcTimer();   ///< Timer for sending TC messages.
         midTimer = new OLSR_MidTimer(); ///< Timer for sending MID messages.
+        hnaTimer = new OLSR_HnaTimer();   ///< Timer for sending HNA messages.
         linkQualityTimer = new OLSR_ETX_LinkQualityTimer();
 
         state_ptr = state_etx_ptr = new OLSR_ETX_state(&this->parameter_);
@@ -183,6 +185,7 @@ OLSR_ETX::initialize(int stage)
         hello_timer_.resched(hello_ival());
         tc_timer_.resched(hello_ival());
         mid_timer_.resched(hello_ival());
+        hna_timer_.resched(hello_ival());
         link_quality_timer_.resched(0.0);
 
         useIndex = false;
@@ -264,6 +267,8 @@ OLSR_ETX::recv_olsr(cMessage* msg)
                 process_hello(msg, receiverIfaceAddr, src_addr, op->pkt_seq_num(), index);
             else if (msg.msg_type() == OLSR_TC_MSG)
                 process_tc(msg, src_addr, index);
+            else if (msg.msg_type() == OLSR_HNA_MSG)
+                process_hna(msg, src_addr, index);
             else if (msg.msg_type() == OLSR_MID_MSG)
                 process_mid(msg, src_addr, index);
             else
@@ -294,7 +299,7 @@ OLSR_ETX::recv_olsr(cMessage* msg)
         if (do_forwarding)
         {
             // HELLO messages are never forwarded.
-            // TC and MID messages are forwarded using the default algorithm.
+            // TC, HNA and MID messages are forwarded using the default algorithm.
             // Remaining messages are also forwarded using the default algorithm.
             if (msg.msg_type() != OLSR_HELLO_MSG)
                 forward_default(msg, duplicated, receiverIfaceAddr, src_addr);

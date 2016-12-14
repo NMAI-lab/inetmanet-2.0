@@ -55,6 +55,9 @@ typedef struct OLSR_rt_entry : public cObject
     nsaddr_t    dest_addr_; ///< Address of the destination node.
     nsaddr_t    next_addr_; ///< Address of the next hop.
     nsaddr_t    iface_addr_;    ///< Address of the local interface.
+    nsaddr_t    net_addr_; ///< Address of a destination network.
+    nsaddr_t    netmask_; ///< Mask of the above destination network.
+    nsaddr_t    gate_addr_; ///<Gateway address of local network
     uint32_t    dist_;      ///< Distance in hops to the destination.
     double quality;
     double delay;
@@ -65,11 +68,17 @@ typedef struct OLSR_rt_entry : public cObject
     inline nsaddr_t & dest_addr()   { return dest_addr_; }
     inline nsaddr_t & next_addr()   { return next_addr_; }
     inline nsaddr_t & iface_addr()  { return iface_addr_; }
+    inline nsaddr_t & net_addr()    { return net_addr_;}
+    inline nsaddr_t & netmask()   { return netmask_;}
+    inline nsaddr_t & gate_addr()   { return gate_addr_;}
 
 
     void    setDest_addr(const nsaddr_t &dest_addr) {  dest_addr_ = dest_addr; }
     void    setNext_addr(const nsaddr_t &next_addr) {  next_addr_ = next_addr; }
     void    setIface_addr(const nsaddr_t    &iface_addr)    {  iface_addr_ = iface_addr; }
+    void    setnet_addr(const nsaddr_t &net_addr)       {net_addr_ = net_addr;}
+    void    setnetmask(const nsaddr_t &netmask)     {netmask_ = netmask;}
+    void    setgate_addr(const nsaddr_t &gate_addr)     {gate_addr_ = gate_addr;}
 
     inline uint32_t&    dist()      { return dist_; }
     OLSR_rt_entry() {}
@@ -78,6 +87,9 @@ typedef struct OLSR_rt_entry : public cObject
         dest_addr_ = e->dest_addr_;  ///< Address of the destination node.
         next_addr_ = e->next_addr_;   ///< Address of the next hop.
         iface_addr_ = e->iface_addr_; ///< Address of the local interface.
+        net_addr_ = e->net_addr_; ///<Address of a destination network.
+        netmask_ = e->netmask_; ///<Mask of above stated network.
+        gate_addr_ = e->gate_addr_; ///<Gateway Address of local network
         dist_ = e->dist_;     ///< Distance in hops to the destination.
         route = e->route;
         index = e->index;
@@ -290,6 +302,10 @@ typedef struct OLSR_topology_tuple : public cObject
     nsaddr_t    dest_addr_;
     /// Main address of a node which is a neighbor of the destination.
     nsaddr_t    last_addr_;
+    /// Main address of a source network.
+    nsaddr_t    net_addr_;
+    /// Mask of a source network.
+    nsaddr_t    netmask_;
     /// Sequence number.
     uint16_t    seq_;
     /// Time at which this tuple expires and must be removed.
@@ -322,6 +338,68 @@ typedef struct OLSR_topology_tuple : public cObject
 
 } OLSR_topology_tuple;
 
+/// A Association
+typedef struct OLSR_association : public cObject
+{
+    /// Main address of the destination network.
+    nsaddr_t    net_addr_;
+    /// Network Mask of the destination network.
+    nsaddr_t    netmask_;
+
+
+    inline nsaddr_t & net_addr()   { return net_addr_; }
+    inline nsaddr_t & netmask()   { return netmask_; }
+    inline void setnet_addr(const nsaddr_t &a) {net_addr_ = a; }
+    inline void setnetmask(const nsaddr_t &a) {netmask_ = a; }
+
+
+ OLSR_association(OLSR_association * e)
+    {
+        net_addr_ = e->net_addr_;
+        netmask_ = e->netmask_;
+    }
+    virtual OLSR_association *dup() {return new OLSR_association (this);}
+
+} OLSR_association;
+
+/// A Association Tuple
+typedef struct OLSR_association_tuple : public cObject
+{
+    /// Main address of the gateway to destination network.
+    nsaddr_t    gate_addr_;
+    /// Main address of a destination network.
+    nsaddr_t    net_addr_;
+    /// Mask of a destination network.
+    nsaddr_t    netmask_;
+    /// Time at which this tuple expires and must be removed.
+    double      time_;
+    int index;
+
+    // cMessage *asocTimer;
+    cObject *asocTimer;
+
+
+    inline nsaddr_t & gate_addr()   { return gate_addr_; }
+    inline nsaddr_t & net_addr()   { return net_addr_; }
+    inline nsaddr_t & netmask()   { return netmask_; }
+    inline void setgate_addr(const nsaddr_t &a) {gate_addr_ = a; }
+    inline void setnet_addr(const nsaddr_t &a) {net_addr_ = a; }
+    inline void setnetmask(const nsaddr_t &a) {netmask_ = a; }
+    inline double&      time()      { return time_; }
+
+ OLSR_association_tuple() {asocTimer = NULL;}
+ OLSR_association_tuple(OLSR_association_tuple * e)
+    {
+        gate_addr_ = e->gate_addr_;
+        net_addr_ = e->net_addr_;
+        netmask_ = e->netmask_;
+        time_ = e->time_;
+        asocTimer = NULL;
+    }
+    virtual OLSR_association_tuple *dup() {return new OLSR_association_tuple (this);}
+
+} OLSR_association_tuple;
+
 
 typedef std::set<nsaddr_t>          mprset_t;   ///< MPR Set type.
 typedef std::vector<OLSR_mprsel_tuple*>     mprselset_t;    ///< MPR Selector Set type.
@@ -331,5 +409,7 @@ typedef std::vector<OLSR_nb2hop_tuple*>     nb2hopset_t;    ///< 2-hop Neighbor 
 typedef std::vector<OLSR_topology_tuple*>   topologyset_t;  ///< Topology Set type.
 typedef std::vector<OLSR_dup_tuple*>        dupset_t;   ///< Duplicate Set type.
 typedef std::vector<OLSR_iface_assoc_tuple*>    ifaceassocset_t; ///< Interface Association Set type.
+typedef std::vector<OLSR_association*>           associations_t; ///<Association type.
+typedef std::vector<OLSR_association_tuple*>    associationset_t; ///<Association Set type.
 
 #endif

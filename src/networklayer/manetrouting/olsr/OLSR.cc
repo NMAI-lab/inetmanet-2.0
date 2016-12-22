@@ -2243,7 +2243,7 @@ OLSR::send_hna()
     msg.hop_count() = 0;
     msg.msg_seq_num() = msg_seq();
 
-    std::map<uint8_t, int> linkcodes_count;
+
    // Add all local HNA associations to the HNA message
 
     for (associations_t::iterator it = associations().begin();

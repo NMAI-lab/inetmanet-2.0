@@ -38,6 +38,8 @@
 #include "OLSR_rtable.h"
 #include "OLSR_repositories.h"
 #include "opp_utils.h"
+#include "ManetAddress.h"
+#include "IPv4Address.h"
 
 #include <map>
 #include <vector>
@@ -96,16 +98,18 @@
 #define OLSR_C      0.0625
 
 
-	/********** Holding times **********/
+    /********** Holding times **********/
 
-	/// Neighbor holding time.
+    /// Neighbor holding time.
 #define OLSR_NEIGHB_HOLD_TIME   3 * OLSR_REFRESH_INTERVAL
-	/// Top holding time.
+    /// Top holding time.
 #define OLSR_TOP_HOLD_TIME  3 * tc_ival()
-	/// Dup holding time.
+    /// Dup holding time.
 #define OLSR_DUP_HOLD_TIME  30
-	/// MID holding time.
+    /// MID holding time.
 #define OLSR_MID_HOLD_TIME  3 * mid_ival()
+    /// HNA holding time.
+#define OLSR_HNA_HOLD_TIME  3 * hna_ival()
 
 /********** Link types **********/
 
@@ -155,7 +159,27 @@
 /// Random number between [0-OLSR_MAXJITTER] used to jitter OLSR packet transmission.
 //#define JITTER            (Random::uniform()*OLSR_MAXJITTER)
 
-class OLSR;         // forward declaration
+class OLSRIf
+{
+  public:
+    InterfaceEntry* dev;
+    int32_t udp_send_sock;
+    int32_t udp_recv_sock;
+    int32_t udp_tunnel_sock;
+    uint8_t if_num;
+    uint8_t if_active;
+    int32_t if_index;
+    int8_t if_rp_filter_old;
+    int8_t if_send_redirects_old;
+    uint16_t seqno;
+    bool wifi_if;
+    ManetAddress address;
+    ManetAddress broad;
+};
+
+class OLSR;         // forward declaratio
+
+
 
 /********** Timers **********/
 
@@ -217,6 +241,15 @@ class OLSR_MidTimer : public OLSR_Timer
     virtual void expire();
 };
 
+
+/// Timer for sending HNA messages.
+class OLSR_HnaTimer : public OLSR_Timer
+{
+  public:
+    OLSR_HnaTimer(OLSR* agent) : OLSR_Timer(agent) {}
+    OLSR_HnaTimer():OLSR_Timer() {}
+    void expire();
+};
 
 
 /// Timer for removing duplicate tuples: OLSR_dup_tuple.
@@ -325,6 +358,50 @@ class OLSR_IfaceAssocTupleTimer : public OLSR_Timer
 
 };
 
+/// Timer for removing association tuples: OLSR_association_tuple.
+class OLSR_AssociationTupleTimer : public OLSR_Timer
+{
+  public:
+    OLSR_AssociationTupleTimer(OLSR* agent, OLSR_association_tuple* tuple) : OLSR_Timer(agent)
+    {
+        tuple_ = tuple;
+    }
+
+    void setTuple(OLSR_association_tuple* tuple) {tuple_ = tuple; tuple->asocTimer = this;}
+    ~OLSR_AssociationTupleTimer();
+    virtual void expire();
+//  protected:
+//  OLSR_association_tuple* tuple_; ///< OLSR_association which must be removed.
+
+};
+
+//class cleanRoutingTable
+//{
+//    public:
+//    double purgeRoutingTable_;
+//    bool purged_;
+//
+//    inline double purgeRoutingTable() {return purgeRoutingTable_;}
+//    inline bool purged() {return purged_;}
+//    void setPurgeRoutingTable(double purgeRoutingTable) {purgeRoutingTable_ = purgeRoutingTable;}
+//    void setPurged(double purged) {purged_ = purged;}
+//
+//};
+
+
+class GwNode
+{
+  public:
+    nsaddr_t orig_addr;
+    uint16_t gw_port;
+    uint16_t gw_failure;
+    simtime_t last_failure;
+    simtime_t deleted;
+  public:
+    GwNode() : orig_addr(), gw_port(0), gw_failure(0), last_failure(0), deleted(0) {}
+};
+
+
 /********** OLSR Agent **********/
 
 
@@ -358,14 +435,23 @@ class OLSR : public ManetRoutingBase
     friend class OLSR_HelloTimer;
     friend class OLSR_TcTimer;
     friend class OLSR_MidTimer;
+    friend class OLSR_HnaTimer;
     friend class OLSR_DupTupleTimer;
     friend class OLSR_LinkTupleTimer;
     friend class OLSR_Nb2hopTupleTimer;
     friend class OLSR_MprSelTupleTimer;
     friend class OLSR_TopologyTupleTimer;
     friend class OLSR_IfaceAssocTupleTimer;
+    friend class OLSR_AssociationTupleTimer;
     friend class OLSR_MsgTimer;
     friend class OLSR_Timer;
+    unsigned char get_gw_class(int down, int up);
+    void get_gw_speeds(unsigned char gw_class, int *down, int *up);
+
+    void choose_gw(void);
+    OLSRIf * is_olsr_if(InterfaceEntry * dev);
+
+
   protected:
 
     //std::priority_queue<TimerQueueElem> *timerQueuePtr;
@@ -406,11 +492,14 @@ class OLSR : public ManetRoutingBase
     cPar     *tc_ival_;
     /// MID messages' emission interval.
     cPar     *mid_ival_;
+    /// HNA messages' emission interval.
+    cPar     *hna_ival_;
     /// Willingness for forwarding packets on behalf of other nodes.
     cPar     *willingness_;
     /// Determines if layer 2 notifications are enabled or not.
     int     use_mac_;
     bool useIndex;
+    bool printOLSRmessages;
 
 
     /// Address of the routing agent.
@@ -431,10 +520,12 @@ class OLSR : public ManetRoutingBase
     OLSR_HelloTimer *helloTimer;    ///< Timer for sending HELLO messages.
     OLSR_TcTimer    *tcTimer;   ///< Timer for sending TC messages.
     OLSR_MidTimer   *midTimer;  ///< Timer for sending MID messages.
+    OLSR_HnaTimer   *hnaTimer;   ///< Timer for sending HNA messages.
 
 #define hello_timer_  (*helloTimer)
 #define  tc_timer_  (*tcTimer)
 #define mid_timer_  (*midTimer)
+#define  hna_timer_  (*hnaTimer)
 
     /// Increments packet sequence number and returns the new value.
     inline uint16_t pkt_seq()
@@ -454,6 +545,7 @@ class OLSR : public ManetRoutingBase
     inline double     hello_ival()    { return hello_ival_->doubleValue();}
     inline double     tc_ival()   { return tc_ival_->doubleValue();}
     inline double     mid_ival()  { return mid_ival_->doubleValue();}
+    inline double     hna_ival()   { return hna_ival_->doubleValue();}
     inline int     willingness()   { return willingness_->longValue();}
     inline int     use_mac()   { return use_mac_;}
 
@@ -465,6 +557,9 @@ class OLSR : public ManetRoutingBase
     inline topologyset_t&   topologyset()   { return state_ptr->topologyset(); }
     inline dupset_t&    dupset()    { return state_ptr->dupset(); }
     inline ifaceassocset_t& ifaceassocset() { return state_ptr->ifaceassocset(); }
+    inline associationset_t& associationset() { return state_ptr->associationset();}
+    inline associations_t& associations() { return state_ptr->associations();}
+
 
     virtual void        recv_olsr(cMessage*);
 
@@ -472,9 +567,19 @@ class OLSR : public ManetRoutingBase
     virtual void        mpr_computation();
     virtual void        rtable_computation();
 
+
+    //my input ---- silas
+    // this is to purge the routing tables at some point in the simulation.
+//    virtual void        routingTableTimer(cMessage* msg);
+    cMessage *purgeTables;
+
+    // my input ''''' application specific .... for DHT update
+    virtual void        cache_recent_table();
+
     virtual bool        process_hello(OLSR_msg&, const nsaddr_t &, const nsaddr_t &, const int &);
     virtual bool        process_tc(OLSR_msg&, const nsaddr_t &, const int &);
     virtual void        process_mid(OLSR_msg&, const nsaddr_t &, const int &);
+    virtual bool        process_hna(OLSR_msg&, const nsaddr_t &, const int &);
 
     virtual void        forward_default(OLSR_msg&, OLSR_dup_tuple*, const nsaddr_t &, const nsaddr_t &);
     virtual void        forward_data(cMessage* p) {}
@@ -483,6 +588,7 @@ class OLSR : public ManetRoutingBase
     virtual void        send_hello();
     virtual void        send_tc();
     virtual void        send_mid();
+    virtual void        send_hna();
     virtual void        send_pkt();
 
     virtual bool        link_sensing(OLSR_msg&, const nsaddr_t &, const nsaddr_t &, const int &);
@@ -493,6 +599,7 @@ class OLSR : public ManetRoutingBase
     virtual void        set_hello_timer();
     virtual void        set_tc_timer();
     virtual void        set_mid_timer();
+    virtual void        set_hna_timer();
 
     virtual void        nb_loss(OLSR_link_tuple*);
     virtual void        add_dup_tuple(OLSR_dup_tuple*);
@@ -510,6 +617,8 @@ class OLSR : public ManetRoutingBase
     virtual void        rm_topology_tuple(OLSR_topology_tuple*);
     virtual void        add_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
     virtual void        rm_ifaceassoc_tuple(OLSR_iface_assoc_tuple*);
+    virtual void        add_association_tuple(OLSR_association_tuple*);
+    virtual void        rm_association_tuple(OLSR_association_tuple*);
     virtual OLSR_nb_tuple*    find_or_add_nb(OLSR_link_tuple*, uint8_t willingness);
 
     const nsaddr_t  & get_main_addr(const nsaddr_t&) const;
@@ -530,17 +639,24 @@ class OLSR : public ManetRoutingBase
     ManetAddress getIfaceAddressFromIndex(int index);
 
     const char * getNodeId(const nsaddr_t &addr);
+    short unsigned int getNodeId1(const uint16_t &addr);
 
     void computeDistributionPath(const nsaddr_t &initNode);
+
+  protected:
+    GwNode *curr_gateway;
 
   public:
     OLSR() {}
     virtual ~OLSR();
 
+    virtual void add_association(OLSR_association*);
+    virtual void rm_association(OLSR_association*);
 
     static double       emf_to_seconds(uint8_t);
     static uint8_t      seconds_to_emf(double);
     static int      node_id(const nsaddr_t&);
+
 
     // Routing information access
     virtual bool supportGetRoute() {return true;}
@@ -563,6 +679,70 @@ class OLSR : public ManetRoutingBase
     virtual bool handleNodeStart(IDoneCallback *doneCallback);
     virtual bool handleNodeShutdown(IDoneCallback *doneCallback);
     virtual void handleNodeCrash();
+    bool debugOutput;           /**< debug output ? */
+
+    //STATISTICS
+    long numHelloMsgs; /**<number of hello messages>*/
+//    long numTimesHelloTimerIsFired;
+    long numTcMsgs; /**<number of tc messages>*/
+    long numHnaMsgs; /**<number of hna messages>*/
+    long numForwTc; /**<number of forwarded tc>*/
+    long numForwHna; /**<number of forwarded hna>*/
+    double TotalMessagesOLSRVector;
+
+    IRoutingTable *inet_rt;
+    NotificationBoard *nb;
+
+
+
+    typedef struct rTable_Cache: public cObject
+    {
+        //destination of this packet
+        IPv4Address dest_addr_;
+        //next hop to this destination
+        IPv4Address gw_addr_;
+        IPv4Address netmask_;
+        int hopCount_;
+        int interface_;
+
+        inline IPv4Address& dest_addr() {return dest_addr_;}
+        inline IPv4Address& gw_addr() {return gw_addr_;}
+        inline IPv4Address& netmask() {return netmask_;}
+        inline int& hopCount() {return hopCount_;}
+        inline int& interface() {return interface_;}
+        void setDest_addr(const IPv4Address &dest_addr) {dest_addr_ = dest_addr;}
+        void setGw_addr(const IPv4Address &gw_addr) {gw_addr_ = gw_addr;}
+        void setNetmask(const IPv4Address &netmask)  {netmask_ = netmask;}
+        void setHopCount(int hopCount) {hopCount_ = hopCount;}
+        void setInterface(int interface) {interface_ = interface;}
+
+        rTable_Cache(){}
+        rTable_Cache(rTable_Cache * e) {
+            dest_addr_ = e->dest_addr_;
+            gw_addr_ = e->gw_addr_;
+            netmask_ = e->netmask_;
+            interface_ = e->interface_;
+        }
+
+        bool operator==(const rTable_Cache& other) const {return this->dest_addr_ == other.dest_addr_
+                && this->gw_addr_ == other.gw_addr_ && this->netmask_ == other.netmask_
+                && this->hopCount_ == other.hopCount_;
+        }
+
+    }rTable_Cache;
+
+    typedef std::vector<rTable_Cache> rTable_CacheVector; ///<DHT entry Set type.
+    rTable_CacheVector item_;
+    inline rTable_CacheVector& item() {return item_;}
+
+//    virtual void insert_rTable_Cache(rTable_Cache);
+    //void erase_DHT_rTable_Cache(DHT_rTable_Cache);
+
+//    struct deleteCtrl : public cObject
+//    {
+//        IPv4Address gateway_;
+//        IPv4Address host_;
+//    };
 
 };
 

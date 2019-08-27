@@ -149,7 +149,11 @@ void ManetNetfilterHook::sendNoRouteMessageToManet(IPv4Datagram *datagram)
 
 void ManetNetfilterHook::sendToManet(cPacket *packet)
 {
-    ipLayer->sendOnTransPortOutGateByProtocolId(packet, IP_PROT_MANET);
+    if(packet->getSenderGateId() == 3) {
+        ipLayer->sendOnTransPortOutGateByProtocolId(packet, IP_PROT_BACKBONEMANET);
+    } else {
+        ipLayer->sendOnTransPortOutGateByProtocolId(packet, IP_PROT_MANET);
+    }
 }
 
 bool ManetNetfilterHook::checkPacketUnroutable(IPv4Datagram* datagram, const InterfaceEntry* outIE)

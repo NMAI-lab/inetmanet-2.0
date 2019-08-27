@@ -372,7 +372,13 @@ void ManetRoutingBase::registerRoutingModule()
     if (!mac_layer_)
     {
         IPSocket socket(gate("to_ip"));
-        socket.registerProtocol(IP_PROT_MANET);
+        const char* name = this->getFullName();
+        if(strcmp(name, "backbonemanetrouting") == 0) {
+            socket.registerProtocol(IP_PROT_BACKBONEMANET);
+            socket.registerProtocol(IP_PROT_IP);
+        } else {
+            socket.registerProtocol(IP_PROT_MANET);
+        }
     }
 }
 
@@ -573,7 +579,16 @@ void ManetRoutingBase::sendToIpOnIface(cPacket *msg, int srcPort, const ManetAdd
         IPv4ControlInfo *ipControlInfo = new IPv4ControlInfo();
         ipControlInfo->setDestAddr(add);
         //ipControlInfo->setProtocol(IP_PROT_UDP);
-        ipControlInfo->setProtocol(IP_PROT_MANET);
+        const char* name = this->getFullName();
+        if(strcmp(name, "backbonemanetrouting") == 0)
+        {
+            ipControlInfo->setProtocol(IP_PROT_BACKBONEMANET);
+        }else
+        {
+            ipControlInfo->setProtocol(IP_PROT_MANET);
+        }
+
+
 
         ipControlInfo->setTimeToLive(ttl);
         udpPacket->setControlInfo(ipControlInfo);
@@ -612,7 +627,13 @@ void ManetRoutingBase::sendToIpOnIface(cPacket *msg, int srcPort, const ManetAdd
         EV << "Sending app packet " << msg->getName() << " over IPv6.\n";
         IPv6ControlInfo *ipControlInfo = new IPv6ControlInfo();
         // ipControlInfo->setProtocol(IP_PROT_UDP);
-        ipControlInfo->setProtocol(IP_PROT_MANET);
+//        ipControlInfo->setProtocol(IP_PROT_MANET);
+        const char* name = this->getFullName();
+        if(strcmp(name, "backbonemanetrouting") == 0) {
+            ipControlInfo->setProtocol(IP_PROT_BACKBONEMANET);
+        } else {
+            ipControlInfo->setProtocol(IP_PROT_MANET);
+        }
         ipControlInfo->setSrcAddr(hostAddress.getIPv6());
         ipControlInfo->setDestAddr(destAddr.getIPv6());
         ipControlInfo->setHopLimit(ttl);
@@ -626,6 +647,8 @@ void ManetRoutingBase::sendToIpOnIface(cPacket *msg, int srcPort, const ManetAdd
     }
     // totalSend++;
 }
+
+
 
 void ManetRoutingBase::sendToIp(cPacket *msg, int srcPort, const ManetAddress& destAddr, int destPort, int ttl, double delay, const ManetAddress &iface)
 {
@@ -737,7 +760,7 @@ void ManetRoutingBase::omnet_chg_rte(const ManetAddress &dst, const ManetAddress
         netmask = IPv4Address::ALLONES_ADDRESS;
 
     InterfaceEntry *ie = getInterfaceWlanByAddress(iface);
-    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::MANET2;
+    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::BACKBONEMANET;
 
     if (found)
     {
@@ -876,7 +899,7 @@ void ManetRoutingBase::omnet_chg_rte(const ManetAddress &dst, const ManetAddress
         netmask = IPv4Address::ALLONES_ADDRESS;
 
     InterfaceEntry *ie = getInterfaceEntry(index);
-    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::MANET2;
+    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::BACKBONEMANET;
 
     if (found)
     {
@@ -910,9 +933,9 @@ void ManetRoutingBase::omnet_chg_rte(const ManetAddress &dst, const ManetAddress
     if (useManetLabelRouting)
         entry->setSourceType(IPv4Route::MANET);
     else
-        entry->setSourceType(IPv4Route::MANET2);
+        entry->setSourceType(IPv4Route::BACKBONEMANET);
 
-        inet_rt->addRoute(entry);
+    inet_rt->addRoute(entry);
 
 #ifdef WITH_80211MESH
     if (locator && locator->isApIp(desAddress))
@@ -998,6 +1021,30 @@ void ManetRoutingBase::omnet_clean_rte()
         }
     }
 }
+
+// ----- silas, my input ........
+// Erase all the entries in the routing table with interface wlan0
+//
+void ManetRoutingBase::omnet_partial_clean_rte()
+{
+    if (!isRegistered)
+        opp_error("Manet routing protocol is not register");
+
+    IPv4Route *entry;
+    if (mac_layer_)
+        return;
+    // clean the route table 'wlan0' interface entry
+    for (int i=inet_rt->getNumRoutes()-1; i>=0; i--)
+    {
+        entry = inet_rt->getRoute(i);
+        if (strstr(entry->getInterfaceName() , "wlan0")!=NULL)
+        {
+            inet_rt->deleteRoute(entry);
+        }
+    }
+}
+
+
 
 //
 // generic receiveChangeNotification, the protocols must implement processLinkBreak and processPromiscuous only
@@ -1442,7 +1489,7 @@ bool ManetRoutingBase::setRoute(const ManetAddress & destination, const ManetAdd
 
     /// Source of route, MANUAL by reading a file,
     /// routing protocol name otherwise
-    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::MANET2;
+    IPv4Route::SourceType sourceType = useManetLabelRouting ? IPv4Route::MANET : IPv4Route::BACKBONEMANET;
     entry->setSourceType(sourceType);
 
     inet_rt->addRoute(entry);

@@ -34,6 +34,7 @@
 #include "NodeOperations.h"
 #include "NodeStatus.h"
 #include "opp_utils.h"
+#include "OLSR_repositories.h"
 
 using namespace OPP_Global;
 
@@ -479,6 +480,7 @@ void RoutingTable::purge()
             it = routes.erase(it);
             ASSERT(route->getRoutingTable() == this); // still filled in, for the listeners' benefit
             nb->fireChangeNotification(NF_IPv4_ROUTE_DELETED, route);
+            nb->fireChangeNotification(NF_IPv4_ROUTE_REMOVED, route);
             delete route;
             deleted = true;
         }
@@ -624,8 +626,17 @@ void RoutingTable::internalAddRoute(IPv4Route *entry)
         error("addRoute(): wrong netmask %s in route", entry->getNetmask().str().c_str());
 
     if (entry->getNetmask().getInt() != 0 && (entry->getDestination().getInt() & entry->getNetmask().getInt()) == 0)
-        error("addRoute(): all bits of destination address %s is 0 inside non zero netmask %s",
-                entry->getDestination().str().c_str(), entry->getNetmask().str().c_str());
+    {
+        if(entry->getInterface()){
+            entry->setNetmask(IPv4Address ());
+            entry->setDestination(IPv4Address ());
+            EV<< "Global default route exception" << endl;
+        }else{
+            error("addRoute(): all bits of destination address %s is 0 inside non zero netmask %s",
+            entry->getDestination().str().c_str(), entry->getNetmask().str().c_str());
+        }
+    }
+
 
     if ((entry->getDestination().getInt() & ~entry->getNetmask().getInt()) != 0)
         error("addRoute(): suspicious route: destination IP address %s has bits set outside netmask %s",
@@ -693,6 +704,7 @@ IPv4Route *RoutingTable::removeRoute(IPv4Route *entry)
         updateDisplayString();
         ASSERT(entry->getRoutingTable() == this); // still filled in, for the listeners' benefit
         nb->fireChangeNotification(NF_IPv4_ROUTE_DELETED, entry);
+        nb->fireChangeNotification(NF_IPv4_ROUTE_REMOVED, entry);
         entry->setRoutingTable(NULL);
     }
     return entry;

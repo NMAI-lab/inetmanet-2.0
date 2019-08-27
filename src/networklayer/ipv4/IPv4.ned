@@ -87,12 +87,14 @@ simple IPv4
 {
     parameters:
         string routingTableModule;
+        string overlayInterface = default("0");
         double procDelay @unit("s") = default(0s);
         int timeToLive = default(32);
         int multicastTimeToLive = default(32);
         double fragmentTimeout @unit("s") = default(60s);
         bool forceBroadcast = default(false);
         bool useProxyARP = default(true);
+        bool isMobility = default(false);
         @display("i=block/routing");
     gates:
         input transportIn[] @labels(IPv4ControlInfo/down,TCPSegment,UDPPacket);

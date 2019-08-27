@@ -42,10 +42,18 @@ simple OLSR extends BaseRouting like IManetRouting
         double Hello_ival @unit(s) = default(2s); // (s) HELLO messages' emission interval. (section 6.2)
         double Tc_ival @unit(s) = default(5s); // (s) Topology Control (TC) messages' emission interval. (section 9.3)
         double Mid_ival @unit(s) = default(5s); // (s) MID (multiple interface declaration) messages' emission interval. (section 5.2) (has effect only if compiled with multiple interface support)
+        double Hna_ival @unit(s) = default(5s); // (s) HNA (Host and Network Association) messages' emmission interval. (section 18)
         int use_mac = default(0); // Determines if layer 2 notifications are enabled or not (chapter 13)
         bool UseIndex = default(false); // use the interface index instead the ip to identify the interface (EXPERIMENTAL)
         bool reduceFuncionality = default(false);
-
+        string announcedNetworks = default("");    // space separated list of announced network/netmask pairs
+        string interface = default("ZERO");  // interfaces to broadcast OLSR packets
+		string preferedGateWay = default("0.0.0.0");
+        bool printOLSRmessages = default(false); // log olsr metrics to stdout
+        bool isFlooding = default(false);
+        bool isStatic = default(false);
+        bool isMobility = default(false);
+        bool dynamicHNA = default(false);
 	///
 	/// \brief Period at which a node must cite every link and every neighbor.
 	///

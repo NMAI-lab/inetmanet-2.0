@@ -95,18 +95,19 @@ OLSR_ETX::initialize(int stage)
         if (isInMacLayer())
             this->setAddressSize(6);
         OlsrAddressSize::ADDR_SIZE = this->getAddressSize();
- 	///
- 	/// \brief Period at which a node must cite every link and every neighbor.
- 	///
- 	/// We only use this value in order to define OLSR_NEIGHB_HOLD_TIME.
- 	///
- 	    OLSR_REFRESH_INTERVAL = par("OLSR_REFRESH_INTERVAL");
+    ///
+    /// \brief Period at which a node must cite every link and every neighbor.
+    ///
+    /// We only use this value in order to define OLSR_NEIGHB_HOLD_TIME.
+    ///
+        OLSR_REFRESH_INTERVAL = par("OLSR_REFRESH_INTERVAL");
         //
         // Do some initializations
         willingness_ = &par("Willingness");
         hello_ival_ = &par("Hello_ival");
         tc_ival_ = &par("Tc_ival");
         mid_ival_ = &par("Mid_ival");
+        hna_ival_ = &par("Hna_ival");
         use_mac_ = par("use_mac");
 
 
@@ -161,6 +162,7 @@ OLSR_ETX::initialize(int stage)
         helloTimer = new OLSR_HelloTimer(); ///< Timer for sending HELLO messages.
         tcTimer = new OLSR_TcTimer();   ///< Timer for sending TC messages.
         midTimer = new OLSR_MidTimer(); ///< Timer for sending MID messages.
+        hnaTimer = new OLSR_HnaTimer();   ///< Timer for sending HNA messages.
         linkQualityTimer = new OLSR_ETX_LinkQualityTimer();
 
         state_ptr = state_etx_ptr = new OLSR_ETX_state(&this->parameter_);
@@ -183,6 +185,7 @@ OLSR_ETX::initialize(int stage)
         hello_timer_.resched(hello_ival());
         tc_timer_.resched(hello_ival());
         mid_timer_.resched(hello_ival());
+        hna_timer_.resched(hello_ival());
         link_quality_timer_.resched(0.0);
 
         useIndex = false;
@@ -264,6 +267,8 @@ OLSR_ETX::recv_olsr(cMessage* msg)
                 process_hello(msg, receiverIfaceAddr, src_addr, op->pkt_seq_num(), index);
             else if (msg.msg_type() == OLSR_TC_MSG)
                 process_tc(msg, src_addr, index);
+            else if (msg.msg_type() == OLSR_HNA_MSG)
+                process_hna(msg, src_addr, index);
             else if (msg.msg_type() == OLSR_MID_MSG)
                 process_mid(msg, src_addr, index);
             else
@@ -294,7 +299,7 @@ OLSR_ETX::recv_olsr(cMessage* msg)
         if (do_forwarding)
         {
             // HELLO messages are never forwarded.
-            // TC and MID messages are forwarded using the default algorithm.
+            // TC, HNA and MID messages are forwarded using the default algorithm.
             // Remaining messages are also forwarded using the default algorithm.
             if (msg.msg_type() != OLSR_HELLO_MSG)
                 forward_default(msg, duplicated, receiverIfaceAddr, src_addr);
@@ -1917,9 +1922,9 @@ OLSR_ETX::rtable_dijkstra_computation()
             omnet_chg_rte(addr, addr,netmask,1, true, addr);
         }
     }
-    else
-        omnet_clean_rte(); // clean IP tables
-    rtable_.clear();
+//    else
+//        omnet_clean_rte(); // clean IP tables
+//    rtable_.clear();
 
 
     debug("Current node %s:\n", getNodeId(ra_addr()));
@@ -2444,8 +2449,10 @@ OLSR_ETX::send_pkt()
             if (i == 0)
                 op2->setSend_time(op1->send_time());
             // Sending packet pair
+            //sendToIp(op1, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
             sendToIp(op1, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
             if (i == 0)
+                //sendToIp(op2, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
                 sendToIp(op2, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
         }
         else
@@ -2466,6 +2473,7 @@ OLSR_ETX::send_pkt()
 
                 it = msgs_.erase(it);
             }
+            //sendToIp(op, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
             sendToIp(op, RT_PORT, destAdd, RT_PORT, IP_DEF_TTL, 0.0, ManetAddress::ZERO);
 
         }
@@ -3474,5 +3482,4 @@ bool OLSR_ETX::getNextHop(const ManetAddress &dest, ManetAddress &add, int &ifac
         cost = rt_entry->quality;
     return true;
 }
-
 

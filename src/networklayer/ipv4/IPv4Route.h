@@ -38,16 +38,17 @@ class INET_API IPv4Route : public cObject
     /** Specifies where the route comes from */
     enum SourceType
     {
-        MANUAL,       ///< manually added static route
-        IFACENETMASK, ///< comes from an interface's netmask
-        RIP,          ///< managed by the given routing protocol
-        OSPF,         ///< managed by the given routing protocol
-        BGP,          ///< managed by the given routing protocol
-        ZEBRA,        ///< managed by the Quagga/Zebra based model
-        MANET,        ///< managed by manet, search exact address
-        MANET2,       ///< managed by manet, search approximate address
-        DYMO,         ///< managed by xDymo
-        AODV,         ///< managed by
+        MANUAL,             ///< manually added static route
+        IFACENETMASK,       ///< comes from an interface's netmask
+        RIP,                ///< managed by the given routing protocol
+        OSPF,               ///< managed by the given routing protocol
+        BGP,                ///< managed by the given routing protocol
+        ZEBRA,              ///< managed by the Quagga/Zebra based model
+        MANET,              ///< managed by manet, search exact address
+        MANET2,             ///< managed by manet, search approximate address
+        BACKBONEMANET,      ///< managed by backbone, search exact address
+        DYMO,               ///< managed by xDymo
+        AODV,               ///< managed by
     };
 
     /** Cisco like administrative distances */

@@ -45,6 +45,7 @@ const char *IPv4Route::sourceTypeName(SourceType sourceType)
         case ZEBRA:                return "ZEBRA";
         case MANET:                return "MANET";
         case MANET2:               return "MANET2";
+        case BACKBONEMANET:        return "BACKBONEMANET";
         case DYMO:                 return "DYMO";
         case AODV:                 return "AODV";
         default:                   return "???";

@@ -464,6 +464,106 @@ OLSR_state::insert_ifaceassoc_tuple(OLSR_iface_assoc_tuple* tuple)
     ifaceassocset_.push_back(tuple);
 }
 
+
+/********** Host-Network Association Set Manipulation **********/
+
+// Kunz: when comparing tuples, ignore differences in time_
+
+#if 0
+OLSR_association_tuple*
+OLSR_state::find_association_tuple (OLSR_association_tuple* tuple)
+
+{
+  for (associationset_t::iterator it = associationset_.begin ();
+       it != associationset_.end (); it++)
+    {
+      if (*it == tuple)
+
+        {
+          return tuple;
+        }
+    }
+  return NULL;
+}
+#endif
+
+OLSR_association_tuple*
+OLSR_state::find_association_tuple (OLSR_association_tuple* tuple)
+
+{
+  for (associationset_t::iterator it = associationset_.begin ();
+       it != associationset_.end (); it++)
+    {
+      if ((*it)->net_addr() == tuple->net_addr() &&
+              (*it)->gateway() == tuple->gateway() &&
+              (*it)->netmask() == tuple->netmask())
+
+        {
+          return *it;
+        }
+    }
+  return NULL;
+}
+
+OLSR_association*
+OLSR_state::find_association (OLSR_association* tuple)
+
+{
+  for (associations_t::iterator it = associations_.begin ();
+       it != associations_.end (); it++)
+    {
+      if (*it == tuple)
+
+        {
+          return tuple;
+        }
+    }
+  return NULL;
+}
+
+
+void
+OLSR_state::erase_association_tuple (OLSR_association_tuple* tuple)
+{
+  for (associationset_t::iterator it = associationset_.begin ();
+       it != associationset_.end (); it++)
+    {
+      if (*it == tuple)
+        {
+          associationset_.erase(it);
+          break;
+        }
+    }
+}
+
+void
+OLSR_state::insert_association_tuple (OLSR_association_tuple* tuple)
+{
+  associationset_.push_back (tuple);
+}
+
+void
+OLSR_state::erase_association (OLSR_association* tuple)
+{
+  for (associations_t::iterator it = associations_.begin ();
+       it != associations_.end (); it++)
+    {
+
+      if (*it == tuple)
+        {
+          associations_.erase (it);
+          break;
+        }
+    }
+}
+
+void
+OLSR_state::insert_association (OLSR_association* tuple)
+{
+  associations_.push_back (tuple);
+}
+
+
 void OLSR_state::clear_all()
 {
 
@@ -474,9 +574,11 @@ void OLSR_state::clear_all()
     for (nbset_t::iterator it = nbset_.begin(); it != nbset_.end(); it++)
         delete (*it);
     nbset_.clear();
+
     for (nb2hopset_t::iterator it = nb2hopset_.begin(); it != nb2hopset_.end(); it++)
         delete (*it);
     nb2hopset_.clear();
+
     for (topologyset_t::iterator it = topologyset_.begin(); it != topologyset_.end(); it++)
         delete (*it);
     topologyset_.clear();
@@ -484,15 +586,23 @@ void OLSR_state::clear_all()
     for (mprselset_t::iterator it = mprselset_.begin(); it != mprselset_.end(); it++)
         delete (*it);
     mprselset_.clear();
+
     for (dupset_t::iterator it = dupset_.begin(); it != dupset_.end(); it++)
         delete (*it);
-
     dupset_.clear();
+
     for (ifaceassocset_t::iterator it = ifaceassocset_.begin(); it != ifaceassocset_.end(); it++)
         delete (*it);
     ifaceassocset_.clear();
     mprset_.clear();
 
+    for (associationset_t::iterator it = associationset_.begin (); it != associationset_.end (); it++)
+        delete (*it);
+    associationset_.clear();
+
+    for (associations_t::iterator it = associations_.begin (); it != associations_.end (); it++)
+        delete (*it);
+        associations_.clear();
 }
 
 OLSR_state::OLSR_state(OLSR_state * st)
@@ -543,6 +653,18 @@ OLSR_state::OLSR_state(OLSR_state * st)
         OLSR_iface_assoc_tuple* tuple = *it;
         ifaceassocset_.push_back(tuple->dup());
     }
+
+    for (associationset_t::iterator it = st->associationset_.begin(); it != st->associationset_.end (); it++)
+    {
+        OLSR_association_tuple* tuple = *it;
+        associationset_.push_back (tuple->dup());
+    }
+
+    for (associations_t::iterator it = st->associations_.begin(); it != st->associations_.end (); it++)
+    {
+        OLSR_association* tuple = *it;
+        associations_.push_back (tuple);
+    }
 }
 
 
@@ -550,4 +672,3 @@ OLSR_state::~OLSR_state()
 {
     clear_all();
 }
-

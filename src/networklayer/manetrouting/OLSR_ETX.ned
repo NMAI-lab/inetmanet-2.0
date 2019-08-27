@@ -31,7 +31,7 @@ import inet.networklayer.IManetRouting;
 //
 // NOTE:
 //  - The initialization of the routing component is done in stage=4
-//  - hello, tc, mid intervals accept INTEGER values only
+//  - hello, tc, mid, hna intervals accept INTEGER values only
 //  - IPv4 address size is assumed in the messages. If you need IPv6, recompile with -DOLSR_IPv6 added to CFLAGS
 //  - Multiple interfaces per OLSR node is supported only with adding -DMULTIPLE_IFACES_SUPPORT to CFLAGS
 //
@@ -45,6 +45,7 @@ simple OLSR_ETX extends BaseRouting like IManetRouting
         double Hello_ival  @unit(s)= default(2s); // (s) HELLO messages' emission interval. (section 6.2)
         double Tc_ival  @unit(s)= default(5s); // (s) Topology Control (TC) messages' emission interval. (section 9.3)
         double Mid_ival  @unit(s)= default(5s); // (s) MID (multiple interface declaration) messages' emission interval. (section 5.2) (has effect only if compiled with multiple interface support)
+        double Hna_ival @unit(s) = default(5s); // (s) HNA (Host and Network Association) messages' emmission interval. (section 18)
         int use_mac = default(0); // Determines if layer 2 notifications are enabled or not (chapter 13)
         bool UseIndex = default(false); // use the interface index instead the ip to identify the interface (EXPERIMENTAL)
         bool reduceFuncionality = default(false);

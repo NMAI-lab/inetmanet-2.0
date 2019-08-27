@@ -71,7 +71,16 @@ void AODVRouting::initialize(int stage)
         isOperational = !nodeStatus || nodeStatus->getState() == NodeStatus::UP;
 
         IPSocket socket(gate("ipOut"));
-        socket.registerProtocol(IP_PROT_MANET);
+
+//        todo  does this make sense really ??
+        const char* name = this->getFullName();
+        if(strcmp(name, "backbonemanetrouting") == 0)
+        {
+             socket.registerProtocol(IP_PROT_BACKBONEMANET);
+        }else{
+             socket.registerProtocol(IP_PROT_MANET);
+        }
+        //socket.registerProtocol(IP_PROT_MANET);
         networkProtocol->registerHook(0, this);
         nb = NotificationBoardAccess().get();
         nb->subscribe(this, NF_LINK_BREAK);
@@ -716,13 +725,34 @@ void AODVRouting::sendAODVPacket(AODVControlPacket *packet, const IPv4Address& d
 
     networkProtocolControlInfo->setTimeToLive(timeToLive);
 
-    networkProtocolControlInfo->setProtocol(IP_PROT_MANET);
-    networkProtocolControlInfo->setDestAddr(destAddr);
-    networkProtocolControlInfo->setSrcAddr(getSelfIPAddress());
+    const char* name = this->getFullName();
+    if(strcmp(name, "backbonemanetrouting") == 0)
+    {
+        networkProtocolControlInfo->setProtocol(IP_PROT_BACKBONEMANET);
+        networkProtocolControlInfo->setDestAddr(destAddr);
+        networkProtocolControlInfo->setSrcAddr(getSelfIPAddress());
 
-    // TODO: Implement: support for multiple interfaces
-    InterfaceEntry *ifEntry = interfaceTable->getInterfaceByName("wlan0");
-    networkProtocolControlInfo->setInterfaceId(ifEntry->getInterfaceId());
+        // TODO: Implement: support for multiple interfaces
+        InterfaceEntry *ifEntry = interfaceTable->getInterfaceByName("wlan1");
+        networkProtocolControlInfo->setInterfaceId(ifEntry->getInterfaceId());
+    }else
+    {
+        networkProtocolControlInfo->setProtocol(IP_PROT_MANET);
+        networkProtocolControlInfo->setDestAddr(destAddr);
+        networkProtocolControlInfo->setSrcAddr(getSelfIPAddress());
+
+        // TODO: Implement: support for multiple interfaces
+        InterfaceEntry *ifEntry = interfaceTable->getInterfaceByName("wlan0");
+        networkProtocolControlInfo->setInterfaceId(ifEntry->getInterfaceId());
+    }
+
+//    networkProtocolControlInfo->setProtocol(IP_PROT_MANET);
+//    networkProtocolControlInfo->setDestAddr(destAddr);
+//    networkProtocolControlInfo->setSrcAddr(getSelfIPAddress());
+//
+//    // TODO: Implement: support for multiple interfaces
+//    InterfaceEntry *ifEntry = interfaceTable->getInterfaceByName("wlan0");
+//    networkProtocolControlInfo->setInterfaceId(ifEntry->getInterfaceId());
 
     UDPPacket *udpPacket = new UDPPacket(packet->getName());
     udpPacket->encapsulate(packet);

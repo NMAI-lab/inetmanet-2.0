@@ -131,6 +131,9 @@ enum
 
 
     // - layer 7 (application)
+    GET_DESTINATION_IP_FROM_BACKBONE,       //DHT4Routing
+    GET_RESPONSE_FROM_BACKBONE,       //DHT4Routing
+    NF_IPv4_ROUTE_REMOVED,           //DHT4Routing
     //...
     // - battery
     NF_BATTERY_CHANGED,

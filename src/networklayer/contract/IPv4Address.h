@@ -79,7 +79,8 @@ class INET_API IPv4Address
      * 224.0.0.0/4         Multicast                  RFC 3171
      * 240.0.0.0/4         Reserved for Future Use    RFC 1112, Section 4
      * 255.255.255.255/32  Limited Broadcast          RFC 919, Section 7; RFC 922, Section 7
-     */
+    */
+
     enum AddressCategory
     {
         UNSPECIFIED,        // 0.0.0.0
@@ -189,7 +190,7 @@ class INET_API IPv4Address
      * Returns the string representation of the address (e.g. "152.66.86.92")
      * @param printUnspec: show 0.0.0.0 as "<unspec>" if true
      */
-    std::string str(bool printUnspec = true) const;
+    std::string str(bool printUnspec = false) const;
 
     /**
      * Returns the address as an int.

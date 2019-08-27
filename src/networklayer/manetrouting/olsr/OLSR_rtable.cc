@@ -30,6 +30,8 @@
 #include "OLSR_rtable.h"
 #include "OLSR_repositories.h"
 
+#define state_ (*state_ptr)
+
 ///
 /// \brief Creates a new empty routing table.
 ///
@@ -80,12 +82,21 @@ OLSR_rtable::rm_entry(const nsaddr_t &dest)
     rt_.erase(dest);
 }
 
+/*
+void
+OLSR_rtable::rm_entry1(const netaddr_t &net)
+{
+    // Remove the pair whose key is dest
+    rt1_.erase(net);
+}
+
 ///
 /// \brief Looks up an entry for the specified destination address.
 /// \param dest destination address.
 /// \return the routing table entry for that destination address, or NULL
 ///     if such an entry does not exist
-///
+///*/
+
 OLSR_rt_entry*
 OLSR_rtable::lookup(const nsaddr_t &dest)
 {
@@ -98,6 +109,34 @@ OLSR_rtable::lookup(const nsaddr_t &dest)
     // Returns the rt entry (second element of the pair)
     return (*it).second;
 }
+
+//OLSR_rt_entry*
+//OLSR_rtable::lookup1(const nsaddr_t, const nsaddr_t &dest)
+//{
+//    // Get the iterator at "dest" position
+//    rtable_t::iterator it = rt_.find(dest);
+//    // If there is no route to "dest", return NULL
+//    if (it == rt_.end())
+//        return NULL;
+//
+//    // Returns the rt entry (second element of the pair)
+//    return (*it).second;
+//}
+
+/*
+OLSR_rt_entry*
+OLSR_rtable::lookup2(const netaddr_t &dest)
+{
+    // Get the iterator at "dest" position
+    rtable_t1::iterator it = rt1_.find(dest);
+    // If there is no route to "dest", return NULL
+    if (it == rt1_.end())
+        return NULL;
+
+    // Returns the rt entry (second element of the pair)
+    return (*it).second;
+}
+ */
 
 ///
 /// \brief  Finds the appropiate entry which must be used in order to forward
@@ -138,14 +177,75 @@ OLSR_rtable::find_send_entry(OLSR_rt_entry* entry)
 OLSR_rt_entry*
 OLSR_rtable::add_entry(const nsaddr_t &dest, const nsaddr_t & next, const nsaddr_t & iface, uint32_t dist, const int &index, double quality, double delay)
 {
+    if(dest != iface){
+
+        // Creates a new rt entry with specified values
+        OLSR_rt_entry* entry = new OLSR_rt_entry();
+        entry->dest_addr() = dest;
+        entry->next_addr() = next;
+        entry->iface_addr() = iface;
+        entry->dist() = dist;
+        entry->quality = quality;
+        entry->delay = delay;
+        entry->local_iface_index() = index;
+        if (entry->dist()==2)
+        {
+            entry->route.push_back(next);
+        }
+
+        // Inserts the new entry
+        rtable_t::iterator it = rt_.find(dest);
+        if (it != rt_.end())
+            delete (*it).second;
+        rt_[dest] = entry;
+
+        // Returns the new rt entry
+        return entry;
+    }
+return 0;
+}
+
+OLSR_rt_entry*
+OLSR_rtable::add_entry(const nsaddr_t & dest, const nsaddr_t & next, const nsaddr_t & iface, uint32_t dist, const int &index, OLSR_rt_entry *entryAux, double quality, double delay)
+
+{
+    if(dest != iface){
+
+        // Creates a new rt entry with specified values
+        OLSR_rt_entry* entry = new OLSR_rt_entry();
+        entry->dest_addr() = dest;
+        entry->next_addr() = next;
+        entry->iface_addr() = iface;
+        entry->dist() = dist;
+        entry->quality = quality;
+        entry->delay = delay;
+        entry->local_iface_index() = index;
+        entry->route = entryAux->route;
+        if (entryAux->dist()==(entry->dist()-1))
+            entry->route.push_back(entryAux->dest_addr());
+
+        // Inserts the new entry
+        rtable_t::iterator it = rt_.find(dest);
+        if (it != rt_.end())
+            delete (*it).second;
+        rt_[dest] = entry;
+
+        // Returns the new rt entry
+        return entry;
+    }
+
+    return 0;
+}
+
+/*
+OLSR_rt_entry*
+OLSR_rtable::add_entry(const netaddr_t &net, const nsaddr_t &next, uint32_t dist, const int &index)
+{
     // Creates a new rt entry with specified values
     OLSR_rt_entry* entry = new OLSR_rt_entry();
-    entry->dest_addr() = dest;
+    entry->net_addr() = net;
     entry->next_addr() = next;
-    entry->iface_addr() = iface;
     entry->dist() = dist;
-    entry->quality = quality;
-    entry->delay = delay;
     entry->local_iface_index() = index;
     if (entry->dist()==2)
     {
@@ -153,41 +253,15 @@ OLSR_rtable::add_entry(const nsaddr_t &dest, const nsaddr_t & next, const nsaddr
     }
 
     // Inserts the new entry
-    rtable_t::iterator it = rt_.find(dest);
-    if (it != rt_.end())
+    rtable_t1::iterator it = rt1_.find(net);
+    if (it != rt1_.end())
         delete (*it).second;
-    rt_[dest] = entry;
+    rt1_[net] = entry;
 
     // Returns the new rt entry
     return entry;
 }
-
-OLSR_rt_entry*
-OLSR_rtable::add_entry(const nsaddr_t & dest, const nsaddr_t & next, const nsaddr_t & iface, uint32_t dist, const int &index, OLSR_rt_entry *entryAux, double quality, double delay)
-{
-    // Creates a new rt entry with specified values
-    OLSR_rt_entry* entry = new OLSR_rt_entry();
-    entry->dest_addr() = dest;
-    entry->next_addr() = next;
-    entry->iface_addr() = iface;
-    entry->dist() = dist;
-    entry->quality = quality;
-    entry->delay = delay;
-    entry->local_iface_index() = index;
-    entry->route = entryAux->route;
-    if (entryAux->dist()==(entry->dist()-1))
-        entry->route.push_back(entryAux->dest_addr());
-
-    // Inserts the new entry
-    rtable_t::iterator it = rt_.find(dest);
-    if (it != rt_.end())
-        delete (*it).second;
-    rt_[dest] = entry;
-
-    // Returns the new rt entry
-    return entry;
-}
-
+ */
 
 ///
 /// \brief Returns the number of entries in the routing table.
@@ -218,6 +292,7 @@ std::string OLSR_rtable::detailedInfo()
         out << "dest:"<< OLSR::node_id(entry->dest_addr()) << " ";
         out << "gw:" << OLSR::node_id(entry->next_addr()) << " ";
         out << "iface:" << OLSR::node_id(entry->iface_addr()) << " ";
+        //out << "net:" <<OLSR::node_id1(entry->net_addr()) << " ";
         out << "dist:" << entry->dist() << " ";
         out <<"\n";
     }

@@ -218,6 +218,10 @@ class INET_API ManetRoutingBase : public cSimpleModule, public INotifiable, prot
     /// Erase all entries for wlan* interfaces in the routing table
     virtual void omnet_clean_rte();
 
+    //todo --- silas, my input .........
+    /// Erase all entries for wlan0 interfaces in the routing table
+    virtual void omnet_partial_clean_rte();
+
     /**
      *  @name Cross layer routines
      */

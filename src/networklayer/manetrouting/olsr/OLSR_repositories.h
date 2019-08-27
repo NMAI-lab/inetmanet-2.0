@@ -93,10 +93,11 @@ typedef struct OLSR_iface_assoc_tuple : public cObject
     nsaddr_t    iface_addr_;
     /// Main address of the node.
     nsaddr_t    main_addr_;
-    /// Time at which this tuple expires and must be removed.
+
     double      time_;
     cObject *asocTimer;
     // cMessage *asocTimer;
+
 
     int index;
     inline int & local_iface_index() {return index;}
@@ -290,6 +291,10 @@ typedef struct OLSR_topology_tuple : public cObject
     nsaddr_t    dest_addr_;
     /// Main address of a node which is a neighbor of the destination.
     nsaddr_t    last_addr_;
+    /// Main address of a source network.
+    nsaddr_t    net_addr_;
+    /// Mask of a source network.
+    nsaddr_t    netmask_;
     /// Sequence number.
     uint16_t    seq_;
     /// Time at which this tuple expires and must be removed.
@@ -322,6 +327,83 @@ typedef struct OLSR_topology_tuple : public cObject
 
 } OLSR_topology_tuple;
 
+/// A Association
+typedef struct OLSR_association : public cObject
+{
+    /// Main address of the destination network.
+    nsaddr_t    net_addr_;
+    /// Mask of the destination.
+    nsaddr_t     netmask_;
+    /// Time at which this tuple expires and must be removed.
+        double      time_;
+        int index;
+
+        // cMessage *asocTimer;
+            cObject *asocTimer;
+
+
+
+    inline nsaddr_t & net_addr()   { return net_addr_; }
+    inline nsaddr_t& netmask()      { return netmask_; }
+    inline void setNet_addr(const nsaddr_t &a) {net_addr_ = a;}
+    inline void setNetmask(const nsaddr_t &a) {netmask_ = a;}
+    inline int & local_iface_index() {return index;}
+    inline double&      time()      { return time_; }
+
+ OLSR_association() {asocTimer = NULL;}
+ OLSR_association(OLSR_association * e)
+    {
+        net_addr_ = e->net_addr_;
+        netmask_ = e->netmask_;
+        time_ = e->time_;
+        index = e->index;
+        asocTimer = NULL;
+    }
+    virtual OLSR_association *dup() {return new OLSR_association (this);}
+
+} OLSR_association;
+
+/// A Association Tuple
+typedef struct OLSR_association_tuple : public cObject
+{
+    /// Main address of the gateway to destination network.
+    nsaddr_t    gateway_;
+    /// Main address of a destination network.
+    //netaddr_t    net_addr_;
+    nsaddr_t     net_addr_;
+    /// Mask address of a destination network.
+    nsaddr_t    netmask_;
+        /// Time at which this tuple expires and must be removed.
+    double      time_;
+    int index = 1;
+
+    // cMessage *asocTimer;
+    cObject *asocTimer;
+
+
+    inline nsaddr_t & gateway()   { return gateway_; }
+    inline nsaddr_t  &net_addr()   { return net_addr_; }
+    inline nsaddr_t  &netmask()       { return netmask_; }
+    inline void setGateway(const nsaddr_t &a) {gateway_ = a; }
+    inline void setNet_addr(const nsaddr_t &a) {net_addr_ = a;}
+    inline void setNetmask(const nsaddr_t &a) {netmask_ = a;}
+    inline int & local_iface_index() {return index;}
+    inline double&      time()      { return time_; }
+
+ OLSR_association_tuple() {asocTimer = NULL;}
+ OLSR_association_tuple(OLSR_association_tuple * e)
+    {
+        gateway_ = e->gateway_;
+        net_addr_ = e->net_addr_;
+        netmask_ = e->netmask_;
+        time_ = e->time_;
+        index = e->index;
+        asocTimer = NULL;
+    }
+    virtual OLSR_association_tuple *dup() {return new OLSR_association_tuple (this);}
+
+} OLSR_association_tuple;
+
 
 typedef std::set<nsaddr_t>          mprset_t;   ///< MPR Set type.
 typedef std::vector<OLSR_mprsel_tuple*>     mprselset_t;    ///< MPR Selector Set type.
@@ -331,5 +413,7 @@ typedef std::vector<OLSR_nb2hop_tuple*>     nb2hopset_t;    ///< 2-hop Neighbor 
 typedef std::vector<OLSR_topology_tuple*>   topologyset_t;  ///< Topology Set type.
 typedef std::vector<OLSR_dup_tuple*>        dupset_t;   ///< Duplicate Set type.
 typedef std::vector<OLSR_iface_assoc_tuple*>    ifaceassocset_t; ///< Interface Association Set type.
+typedef std::vector<OLSR_association*>           associations_t; ///<Association type.
+typedef std::vector<OLSR_association_tuple*>    associationset_t; ///<Association Set type.
 
 #endif

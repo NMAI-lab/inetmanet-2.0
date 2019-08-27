@@ -72,6 +72,9 @@ const char *notificationCategoryName(int category)
         case NF_OVERLAY_NODE_GRACEFUL_LEAVE: return "NODE-GRACEFUL-LEAVE";
         case NF_BATTERY_CHANGED: return "NF_BATTERY_CHANGED";
         case NF_BATTERY_CPUTIME_CONSUMED: return "NF_BATTERY_CPUTIME_CONSUMED";
+        case GET_DESTINATION_IP_FROM_BACKBONE: return "DESTINATION_IP_FROM_BACKBONE";
+        case GET_RESPONSE_FROM_BACKBONE: return "GET_RESULT";
+        case NF_IPv4_ROUTE_REMOVED: return "REMOVED ROUTE";
 
         default: sprintf(buf, "%d", category); s = buf; break;
     }

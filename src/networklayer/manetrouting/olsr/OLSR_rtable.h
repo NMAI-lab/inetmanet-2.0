@@ -34,6 +34,7 @@
 #include "INETDefs.h"
 
 #include "OLSR_repositories.h"
+#include "OLSR_state.h"
 
 ///
 /// \brief Defines rtable_t as a map of OLSR_rt_entry, whose key is the destination address.
@@ -42,6 +43,8 @@
 /// of the pair can be accesed via "first" and "second" members.
 ///
 typedef std::map<nsaddr_t, OLSR_rt_entry*> rtable_t;
+//typedef std::map<netaddr_t, OLSR_rt_entry*> rtable_t1;
+
 
 ///
 /// \brief This class is a representation of the OLSR's Routing Table.
@@ -60,10 +63,14 @@ class OLSR_rtable : public cObject
 
     void        clear();
     void        rm_entry(const nsaddr_t &dest);
+    //void        rm_entry1(const netaddr_t &dest);
     OLSR_rt_entry*  add_entry(const nsaddr_t &dest, const nsaddr_t &next, const nsaddr_t &iface, uint32_t dist, const int &, double quality = -1, double delay = -1);
+    //OLSR_rt_entry*  add_entry(const netaddr_t &net, const nsaddr_t &next, const uint32_t dist, const int &);
+    //OLSR_rt_entry*  add_entry(const nsaddr_t &net, const nsaddr_t &next, const uint32_t dist, const int &);
     OLSR_rt_entry*  add_entry(const nsaddr_t &dest, const nsaddr_t &next, const nsaddr_t &iface, uint32_t dist, const int &, PathVector path, double quality = -1, double delay = -1);
     OLSR_rt_entry*  add_entry(const nsaddr_t &dest, const nsaddr_t &next, const nsaddr_t &iface, uint32_t dist, const int &, OLSR_rt_entry *entry, double quality = -1, double delay = -1);
     OLSR_rt_entry*  lookup(const nsaddr_t &dest);
+    //OLSR_rt_entry*  lookup2(const netaddr_t &dest);
     OLSR_rt_entry*  find_send_entry(OLSR_rt_entry*);
     uint32_t    size();
 
@@ -72,6 +79,13 @@ class OLSR_rtable : public cObject
     virtual OLSR_rtable *dup() {return new OLSR_rtable(this);}
 
 //  void        print(Trace*);
+
+    /// Internal state with all needed data structs.
+  protected:
+
+    OLSR_state      *state_ptr;
+
+
 };
 
 #endif

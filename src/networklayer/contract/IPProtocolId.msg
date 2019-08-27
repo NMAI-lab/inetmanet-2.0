@@ -27,6 +27,7 @@ cplusplus {{
 // Protocol field: taken from RFC 1700.
 // Replacing old RFC1700 with newer (28/06/01) Protocol Numbers
 //
+
 enum IPProtocolId
 {
 
@@ -48,7 +49,7 @@ enum IPProtocolId
     IP_PROT_SCTP = 132;
     IP_PROT_DSR  = 48;
     IP_PROT_MANET = 138;
-
+    IP_PROT_BACKBONEMANET = 139; // temporary till i figure out if it makes sense to have a variation of this value
     IP_PROT_IPv6EXT_HOP = 0;       // Hop-by-hop option header.
     IP_PROT_IPv6EXT_DEST = 60;     // Destination options header.
     IP_PROT_IPv6EXT_ROUTING = 43;  // Routing header.

@@ -22,6 +22,7 @@ import inet.applications.IPingApp;
 import inet.applications.ISCTPApp;
 import inet.applications.ITCPApp;
 import inet.applications.IUDPApp;
+import inet.applications.pingapp.PingTestApp;
 import inet.transport.ISCTP;
 import inet.transport.ITCP;
 import inet.transport.IUDP;
@@ -88,6 +89,9 @@ module StandardHost extends NodeBase
             parameters:
                 @display("p=635,141,row,60");
         }
+        pingTestApp[numPingApps]: <default("PingTestApp")> like IPingApp  {
+            @display("p=641,279");
+        }
     connections allowunconnected:
         for i=0..numTcpApps-1 {
             tcpApp[i].tcpOut --> tcp.appIn++;
@@ -115,5 +119,9 @@ module StandardHost extends NodeBase
         for i=0..numPingApps-1 {
             networkLayer.pingOut++ --> pingApp[i].pingIn;
             networkLayer.pingIn++ <-- pingApp[i].pingOut;
+        }
+        for i=0..numPingApps-1 {
+            networkLayer.pingOut++ --> pingTestApp[i].pingIn;
+            networkLayer.pingIn++ <-- pingTestApp[i].pingOut;
         }
 }

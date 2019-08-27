@@ -85,6 +85,8 @@ module NetworkLayer
         for i=0..sizeof(transportOut)-1 {
             ip.transportOut++ --> { @display("m=n"); } --> transportOut[i];
         }
+        
+//        ip.preRoutingOut++ --> ip.preRoutingIn++;
 
         ip.transportOut++ --> icmp.localIn;
         ip.transportIn++ <-- icmp.sendOut;

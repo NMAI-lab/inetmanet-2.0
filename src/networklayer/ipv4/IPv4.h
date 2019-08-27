@@ -28,27 +28,36 @@
 #include "IPv4FragBuf.h"
 #include "ProtocolMap.h"
 #include "QueueBase.h"
-
+#include "NotificationBoard.h"
+#include "cmessage.h"
 
 class ARPPacket;
 class ICMPMessage;
 class IInterfaceTable;
 class IRoutingTable;
 class NotificationBoard;
+class IPSocket;
 
+
+/// Maximum allowed Dup entries.
+#define MEAN    30
+/// Dup holding time.
+#define IPv4_DUP_HOLD_TIME  5
+/// simulation time
+#define CURRENT_TIME  SIMTIME_DBL(simTime())
 /**
  * Implements the IPv4 protocol.
  */
-class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, public cListener
+class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, public cListener, public INotifiable
 {
-  public:
+public:
     /**
      * Represents an IPv4Datagram, queued by a Hook
      */
     class QueuedDatagramForHook {
-      public:
+    public:
         QueuedDatagramForHook(IPv4Datagram* datagram, const InterfaceEntry* inIE, const InterfaceEntry* outIE, const IPv4Address& nextHopAddr, IHook::Type hookType) :
-                datagram(datagram), inIE(inIE), outIE(outIE), nextHopAddr(nextHopAddr), hookType(hookType) {}
+            datagram(datagram), inIE(inIE), outIE(outIE), nextHopAddr(nextHopAddr), hookType(hookType) {}
         virtual ~QueuedDatagramForHook() {}
 
         IPv4Datagram* datagram;
@@ -59,7 +68,7 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
     };
     typedef std::map<IPv4Address, cPacketQueue> PendingPackets;
 
-  protected:
+protected:
     bool isDsr;
     static simsignal_t completedARPResolutionSignal;
     static simsignal_t failedARPResolutionSignal;
@@ -71,8 +80,12 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
     ICMPAccess icmpAccess;
     cGate *arpInGate;
     cGate *arpOutGate;
+    cGate *to_ip;
     int transportInGateBaseId;
     int queueOutGateBaseId;
+    IPv4Datagram* datagram;
+    IPv4* ipv4;
+    bool mac_layer_;
 
     // config
     int defaultTimeToLive;
@@ -105,7 +118,7 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
     DatagramQueueForHooks queuedDatagramsForHooks;
 
     static simsignal_t iPv4PromiscousPacket;
-  protected:
+protected:
     // utility: look up interface from getArrivalGate()
     virtual const InterfaceEntry *getSourceInterfaceFrom(cPacket *packet);
 
@@ -120,6 +133,12 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
 
     // utility: processing requested ARP resolution timed out
     void arpResolutionTimedOut(IARPCache::Notification *entry);
+
+    virtual void receiveChangeNotification(int category, const cObject *details);
+    virtual void checkTempRoutingTable(IPv4Datagram *datagram);
+
+    virtual IPv4Datagram *pkt_encapsulate(IPv4Datagram *data, IPv4Address address);
+    virtual IPv4Datagram *pkt_decapsulate(IPv4Datagram *datagram);
 
     /**
      * Encapsulate packet coming from higher layers into IPv4Datagram, using
@@ -230,10 +249,10 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
 
     virtual void sendPacketToNIC(cPacket *packet, const InterfaceEntry *ie);
 
-  public:
+public:
     IPv4() { rt = NULL; ift = NULL; arp = NULL; arpOutGate = NULL; }
 
-  protected:
+protected:
     virtual int numInitStages() const { return 2; }
     virtual void initialize(int stage);
     virtual void handleMessage(cMessage *msg);
@@ -245,7 +264,7 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
     virtual void endService(cPacket *packet);
 
     // NetFilter functions:
-  protected:
+protected:
     /**
      * called before a packet arriving from the network is routed
      */
@@ -270,12 +289,12 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
      * called before a packet arriving locally is delivered
      */
     IHook::Result datagramLocalOutHook(IPv4Datagram* datagram, const InterfaceEntry*& outIE, IPv4Address& nextHopAddr);
-   
+
     const IPv4RouteRule * checkInputRule(const IPv4Datagram*);
     const IPv4RouteRule * checkOutputRule(const IPv4Datagram*, const InterfaceEntry*);
     const IPv4RouteRule * checkOutputRuleMulticast(const IPv4Datagram*);
 
-  public:
+public:
     /**
      * registers a Hook to be executed during datagram processing
      */
@@ -309,11 +328,139 @@ class INET_API IPv4 : public QueueBase, public INetfilter, public ILifecycle, pu
     /// cListener method
     virtual void receiveSignal(cComponent *source, simsignal_t signalID, cObject *obj);
 
-  protected:
+    virtual bool dupPktDetection(IPv4Datagram *datagram);
+    virtual void checkDupPkt();
+    virtual void dhtQuerry(IPv4Datagram *datagram);
+
+protected:
     virtual bool isNodeUp();
     virtual void stop();
     virtual void start();
     virtual void flush();
+
+    /// dup Packet
+    typedef struct dup_tuple: public cObject {
+    public:
+        //originator of this packet
+        IPv4Address src_addr_;
+        //destination of this packet
+        IPv4Address dest_addr_;
+        // Time stamp on this tuple i.e; when this tuple was created
+        simtime_t ctime_;
+        /// Time at which this tuple expires and must be removed.
+        double vtime_;
+        int index;
+
+        inline IPv4Address& src_addr() {
+            return src_addr_;
+        }
+        inline IPv4Address& dest_addr() {
+            return dest_addr_;
+        }
+        inline simtime_t& ctime() {
+            return ctime_;
+        }
+        inline void setSrc_addr(const IPv4Address &a) {
+            src_addr_ = a;
+        }
+        inline void setDest_addr(const IPv4Address &a) {
+            dest_addr_ = a;
+        }
+        inline void setCtime(const simtime_t &a) {
+            ctime_ = a;
+        }
+        inline double& vtime() {
+            return vtime_;
+        }
+        inline int & local_iface_index() {
+            return index;
+        }
+
+        dup_tuple() {}
+        dup_tuple(dup_tuple * e) {
+            src_addr_ = e->src_addr_;
+            dest_addr_ = e->dest_addr_;
+            ctime_ = e->ctime_;
+            vtime_ = e->vtime_;
+            index = e->index;
+        }
+
+        bool operator==(const dup_tuple& other) const {
+            return this->src_addr_ == other.src_addr_
+                    && this->dest_addr_ == other.dest_addr_;
+        }
+
+        // virtual dup_tuple *dup() {return new dup_tuple (this);}
+
+    } dup_tuple;
+
+    typedef std::vector<dup_tuple> dupset_t; ///<dup broadcast Set type.
+
+    dupset_t dupset_;
+
+    inline dupset_t& dupset() {
+        return dupset_;
+    }
+
+    void erase_dup_tuple(dup_tuple);
+    void insert_dup_tuple(dup_tuple);
+
+
+
+    typedef struct Temp_cache: public cObject
+    {
+        //originator of this packet
+        IPv4Address dest_addr_;
+        //gateway to destination node
+        IPv4Address destGw_addr_;
+        //a queued datagram
+        IPv4Datagram *data_;
+        // Time stamp on this tuple i.e; when this tuple was created
+        simtime_t ctime_;
+        /// Time at which this tuple expires and must be removed.
+        double vtime_;
+        bool check_;
+
+        inline IPv4Address& dest_addr() {return dest_addr_;}
+        inline IPv4Address& destGw_addr() {return destGw_addr_;}
+        inline IPv4Datagram data() {return *data_;}
+        inline simtime_t& ctime() {return ctime_;}
+        inline bool& check() {return check_;}
+        inline double vtime() {return vtime_;}
+        void setDest_addr(const IPv4Address &dest_addr) {dest_addr_ = dest_addr;}
+        void setDestGw_addr(const IPv4Address &destGw_addr) {destGw_addr_ = destGw_addr;}
+        void setData(IPv4Datagram *data) {*data_ = *data;}
+        void setCtime(const simtime_t &ctime) {ctime_ = ctime;}
+        void setVtime(double vtime) {vtime_ = vtime;}
+        void setCheck(bool check) {check_ = check;}
+
+        Temp_cache(){}
+        Temp_cache(Temp_cache * e) {
+            dest_addr_ = e->dest_addr_;
+            destGw_addr_ = e->destGw_addr_;
+            data_ = e->data_;
+            ctime_ = e->ctime_;
+            vtime_ = e->vtime_;
+            check_ = e->check_;
+        }
+
+        bool operator==(const Temp_cache& other) const {return this->dest_addr_ == other.dest_addr_
+                && this->destGw_addr_ == other.destGw_addr_ && this->data_ == other.data_
+                && this->ctime_ == other.ctime_;
+        }
+
+    }Temp_cache;
+
+
+    typedef std::vector<Temp_cache> temp; ///temporary routing table
+    temp r_;
+    inline temp& R() {return r_;}
+
+    void insert_Temp_cache(Temp_cache);
+    //void erase_Temp_cache(Temp_cache);
+
+
+    IPv4(IPv4 *);
 };
 
 #endif
